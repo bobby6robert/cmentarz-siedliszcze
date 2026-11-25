@@ -1,0 +1,50 @@
+name: Aktualizacja cmentarza
+
+on:
+  schedule:
+    - cron: "17 2 * * 0"   # co niedzielę ok. 3:17 w nocy (czasu polskiego zimą)
+  workflow_dispatch:        # ręczne uruchomienie przyciskiem "Run workflow"
+  push:
+    branches: [main]
+    paths: ["site/**", "scripts/**", ".github/workflows/**"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Pamięć podręczna zdjęć grobów
+        uses: actions/cache@v4
+        with:
+          path: .cache/zdjecia
+          key: zdjecia-${{ github.run_id }}
+          restore-keys: zdjecia-
+      - run: pip install requests pillow
+      - name: Pobranie danych z cmentarz.app i zbudowanie strony
+        run: python scripts/update.py
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
