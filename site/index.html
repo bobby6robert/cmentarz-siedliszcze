@@ -565,7 +565,7 @@ function setView(map){$("map").hidden=!map;$("tMap").setAttribute("aria-pressed"
 $("tMap").onclick=()=>setView($("map").hidden);
 $("tWalk").onclick=()=>{if(mode==="intro")flyToPoint(PTS.find(p=>p.type==="wejscie")||DEFAULT_POINTS[1]);setView(false)};
 $("tFly").onclick=()=>{mode="intro";$("map").hidden=true;$("pad").hidden=true;$("mini").hidden=true;$("where").hidden=true;$("hud").hidden=true;$("intro").classList.remove("out")};
-$("tNight").onclick=()=>{night=!night;$("tNight").setAttribute("aria-pressed",night);applyNight()};
+$("tNight").onclick=()=>{night=!night;$("tNight").setAttribute("aria-pressed",night);applyNight();for(const Lb of labels)Lb.id=-1;if(GL.ready)updateLabels()};
 function whereAt(x,z){
   const g=nearest(x,z,3.5);if(g)return`Kwatera ${g.kw} · przy grobie ${g.code}`;
   const S=SECT.find(S=>inPoly(x,z,S.hull));if(S)return`Kwatera ${S.n} · alejka`;
@@ -719,7 +719,7 @@ function applyNight(){
   const rt=pmrem.fromEquirectangular(et);et.dispose();if(scene.environment)scene.environment.dispose();scene.environment=rt.texture;
 }
 function paintLabel(Lb,g){
-  const x=Lb.c.getContext("2d"),cl=new THREE.Color(g.col),gold=(.3*cl.r+.59*cl.g+.11*cl.b)<.45,ps=g.persons.slice(0,3);x.clearRect(0,0,256,256);
+  const x=Lb.c.getContext("2d"),cl=new THREE.Color(g.col),gold=night||(.3*cl.r+.59*cl.g+.11*cl.b)<.45,ps=g.persons.slice(0,3);x.clearRect(0,0,256,256);
   x.fillStyle=gold?"#e2c27a":"#1a1a1a";x.textAlign="center";
   const cross=g.shape!==3;let y=cross?40:26;
   if(cross){x.font="700 28px Georgia, serif";x.fillText("✝",128,y);y+=32}
@@ -730,7 +730,7 @@ function paintLabel(Lb,g){
     if(ps.length===1&&p.first){x.fillText(p.first.toUpperCase(),128,y+28);x.fillText(p.last.toUpperCase(),128,y+56);x.font="500 19px Georgia, serif";x.fillText(`${p.born?yr(p.born)+" – ":""}${yr(p.died)}`,128,y+84);y+=gap+20}
     else{const t=x.measureText(nm).width>230?nm.slice(0,22)+"…":nm;x.fillText(t,128,y+fsz+4);x.font=`500 ${fsz-3}px Georgia, serif`;x.fillText(`${p.born?yr(p.born)+" – ":""}${yr(p.died)}`,128,y+fsz*2+8);y+=gap}}
   if(g.persons.length>3){x.font="italic 14px Georgia, serif";x.fillText(`i ${g.persons.length-3} więcej`,128,Math.min(248,y+10))}
-  Lb.tex.needsUpdate=true;Lb.id=g.id;Lb.m.material.metalness=gold?.7:0;Lb.m.material.roughness=gold?.3:.6}
+  Lb.tex.needsUpdate=true;Lb.id=g.id;const mt=Lb.m.material;mt.metalness=gold?.7:0;mt.roughness=gold?.3:.6;mt.emissiveMap=night?Lb.tex:null;mt.emissive.set(night?"#e8c878":"#000000");mt.emissiveIntensity=night?.9:0;mt.needsUpdate=true}
 function updateLabels(){
   const near=[];const cx=Math.floor(player.x/6),cz=Math.floor(player.z/6);
   for(let i=-3;i<=3;i++)for(let j=-3;j<=3;j++)for(const g of GRID[(cx+i)+","+(cz+j)]||[]){const d=Math.hypot(g.x-player.x,g.z-player.z);if(d<16)near.push([d,g])}
