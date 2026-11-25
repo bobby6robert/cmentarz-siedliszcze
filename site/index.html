@@ -300,7 +300,9 @@ footer{border-top:1px solid var(--line);padding-block:16px;color:var(--muted);fo
 (function(){
 "use strict";
 /* ============ UKŁAD: prawdziwe obrysy grobów z cmentarz.app (metry; X wzdłuż ul. Szpitalnej, Z w głąb cmentarza) ============ */
-const groundY=()=>0;
+let HG=null;
+function groundY(x,z){if(!HG)return 0;const fx=Math.max(0,Math.min(HG.nx-1.001,x/HG.step)),fz=Math.max(0,Math.min(HG.nz-1.001,z/HG.step)),i=fx|0,j=fz|0,u=fx-i,v=fz-j,c=HG.cm,n=HG.nx;
+  return((c[j*n+i]*(1-u)+c[j*n+i+1]*u)*(1-v)+(c[(j+1)*n+i]*(1-u)+c[(j+1)*n+i+1]*u)*v)/100}
 let ENTR=[],DEFAULT_POINTS=[],IMG={w:265,h:310},FOOT=[],PHOTO=null;
 let GR=[],BYCODE={},PERSONS=[],SECT=[],SITE=[],CENTER={x:130,z:150};
 
@@ -332,7 +334,7 @@ function loadData(raw){
     for(const p of persons)PERSONS.push({gid:id,full:(p.first+" "+p.last).trim(),born:p.born,died:p.died,n:norm(p.first+" "+p.last)});
   }
   CENTER={x:GR.reduce((a,g)=>a+g.x,0)/GR.length,z:GR.reduce((a,g)=>a+g.z,0)/GR.length};
-  IMG=raw.img;FOOT=raw.foot;SITE=FOOT;
+  IMG=raw.img;FOOT=raw.foot;SITE=FOOT;HG=raw.hgt||null;
   DEFAULT_POINTS=raw.ent.map((e,i)=>({id:"d"+(i+1),type:"wejscie",name:e[0],x:e[1],z:e[2]}));PTS=DEFAULT_POINTS.slice();
   for(const t of raw.trees)if(!raw.ent.some(e=>Math.hypot(e[1]-t[0],e[2]-t[1])<6))TREES.push([t[0],t[1],2.6+rnd()*2.6,rnd()<.12?"b":"l"]);
   const by={};for(const g of GR)(by[g.kw]=by[g.kw]||[]).push([g.x,g.z]);
@@ -583,7 +585,7 @@ function speckle(base,spk,n,sz){return(x,s)=>{if(base){x.fillStyle=base;x.fillRe
 const Std=o=>{const m=new THREE.MeshStandardMaterial(o);if(o.color)m.color.convertSRGBToLinear();return m};
 const lin=c=>new THREE.Color(c).convertSRGBToLinear();
 function shapeOf(pts){const sh=new THREE.Shape();pts.forEach((p,i)=>i?sh.lineTo(p[0],-p[1]):sh.moveTo(p[0],-p[1]));sh.closePath();return sh}
-function place(o,g,lx,ly,lz,extraYaw=0){const c=Math.cos(g.yaw),s=Math.sin(g.yaw);o.position.set(g.x+lx*c+lz*s,ly,g.z-lx*s+lz*c);o.rotation.set(0,g.yaw+extraYaw,0)}
+function place(o,g,lx,ly,lz,extraYaw=0){const c=Math.cos(g.yaw),s=Math.sin(g.yaw),x=g.x+lx*c+lz*s,z=g.z-lx*s+lz*c;o.position.set(x,ly+(g.gy!==undefined?g.gy:groundY(x,z)),z);o.rotation.set(0,g.yaw+extraYaw,0)}
 function startGL(){
   if(!window.THREE)throw 0;
   DUMMY=new THREE.Object3D();
@@ -606,25 +608,36 @@ function startGL(){
   const concT=canvasTex(256,speckle("#b9b4aa",["#a39e94","#cdc8be","#8e897f"],9000,1.6),[1,1]);
   const tex=(t,rx,ry)=>{const c=t.clone();c.needsUpdate=true;c.repeat.set(rx,ry);return c};
   const add=(geo,mat,x,y,z,o={})=>{const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);if(o.rx)m.rotation.x=o.rx;if(o.ry)m.rotation.y=o.ry;m.receiveShadow=o.rs!==false;m.castShadow=!!o.cs;scene.add(m);return m};
-  /* teren: trawa dookoła + zdjęcie lotnicze cmentarza z cmentarz.app jako podłoże */
-  add(new THREE.PlaneGeometry(3000,3000),Std({map:tex(grassT,200,200),roughness:1}),IMG.w/2,-.03,IMG.h/2,{rx:-Math.PI/2});
+  /* teren: wysokości z Geoportalu (GUGiK) + zdjęcie lotnicze cmentarza z cmentarz.app jako podłoże */
+  for(const g of GR){const c=Math.cos(g.yaw),s=Math.sin(g.yaw);let m=1e9;for(const[a,b]of[[-.5,-.5],[.5,-.5],[-.5,.5],[.5,.5]]){const lx=a*g.W,lz=b*g.L;m=Math.min(m,groundY(g.x+lx*c+lz*s,g.z-lx*s+lz*c))}g.gy=m}
+  add(new THREE.PlaneGeometry(3000,3000),Std({map:tex(grassT,200,200),roughness:1}),IMG.w/2,-.05,IMG.h/2,{rx:-Math.PI/2});
   const orto=new THREE.TextureLoader().load("orto.jpg",()=>{mapCache=null;drawMap()});orto.encoding=THREE.sRGBEncoding;orto.anisotropy=Math.min(16,renderer.capabilities.getMaxAnisotropy());
   const om=new THREE.MeshStandardMaterial({map:orto,roughness:1,metalness:0});
   om.onBeforeCompile=sh=>{sh.fragmentShader=sh.fragmentShader.replace("#include <map_fragment>","#include <map_fragment>\n if(diffuseColor.r>0.93&&diffuseColor.g>0.93&&diffuseColor.b>0.93) discard;")};
-  add(new THREE.PlaneGeometry(IMG.w,IMG.h),om,IMG.w/2,0,IMG.h/2,{rx:-Math.PI/2});
+  {const st=HG?HG.step:IMG.w,nx=HG?HG.nx:2,nz=HG?HG.nz:2,pos=[],uv=[],idx=[];
+    for(let j=0;j<nz;j++)for(let i=0;i<nx;i++){const x=Math.min(IMG.w,i*(HG?st:IMG.w)),z=Math.min(IMG.h,j*(HG?st:IMG.h));pos.push(x,groundY(x,z),z);uv.push(x/IMG.w,1-z/IMG.h)}
+    for(let j=0;j<nz-1;j++)for(let i=0;i<nx-1;i++){const a=j*nx+i,b=a+1,c=a+nx,d=c+1;idx.push(a,c,b,b,c,d)}
+    const tg=new THREE.BufferGeometry();tg.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));tg.setAttribute("uv",new THREE.Float32BufferAttribute(uv,2));tg.setIndex(idx);tg.computeVertexNormals();
+    const tm=new THREE.Mesh(tg,om);tm.receiveShadow=true;scene.add(tm);
+    // ściana-skirt wokół zdjęcia, żeby krawędź terenu nie wisiała w powietrzu
+    const sk=[],skI=[];const edge=[];for(let i=0;i<nx;i++)edge.push([i,0]);for(let j=1;j<nz;j++)edge.push([nx-1,j]);for(let i=nx-2;i>=0;i--)edge.push([i,nz-1]);for(let j=nz-2;j>0;j--)edge.push([0,j]);
+    edge.forEach(([i,j],k)=>{const x=Math.min(IMG.w,i*(HG?st:IMG.w)),z=Math.min(IMG.h,j*(HG?st:IMG.h));sk.push(x,groundY(x,z)-.02,z,x,-.06,z)});
+    for(let k=0;k<edge.length;k++){const a=k*2,b=((k+1)%edge.length)*2;skI.push(a,a+1,b,b,a+1,b+1)}
+    const sg2=new THREE.BufferGeometry();sg2.setAttribute("position",new THREE.Float32BufferAttribute(sk,3));sg2.setIndex(skI);sg2.computeVertexNormals();
+    scene.add(new THREE.Mesh(sg2,Std({color:"#5f6f45",roughness:1,side:THREE.DoubleSide})))}
   /* drzewa */
   const trunkG=new THREE.CylinderGeometry(.16,.3,1,7),leafG=new THREE.IcosahedronGeometry(1,1);
   const lp=leafG.attributes.position;for(let i=0;i<lp.count;i++){const f=.85+Math.random()*.3;lp.setXYZ(i,lp.getX(i)*f,lp.getY(i)*f,lp.getZ(i)*f)}leafG.computeVertexNormals();
   const nT=TREES.length,tI=new THREE.InstancedMesh(trunkG,Std({color:"#ffffff",roughness:.9}),nT),lI=new THREE.InstancedMesh(leafG,Std({color:"#ffffff",roughness:.85,flatShading:true}),nT*3);
   tI.castShadow=lI.castShadow=true;lI.receiveShadow=true;const col=new THREE.Color();
-  TREES.forEach((t,i)=>{const h=t[2]*1.9,y0=0;DUMMY.rotation.set(0,0,0);DUMMY.scale.set(1,h*.55,1);DUMMY.position.set(t[0],y0+h*.27,t[1]);DUMMY.updateMatrix();tI.setMatrixAt(i,DUMMY.matrix);tI.setColorAt(i,col.set(t[3]==="b"?"#d9d4c8":"#4d3a2a").convertSRGBToLinear());
+  TREES.forEach((t,i)=>{const h=t[2]*1.9,y0=groundY(t[0],t[1]);DUMMY.rotation.set(0,0,0);DUMMY.scale.set(1,h*.55,1);DUMMY.position.set(t[0],y0+h*.27,t[1]);DUMMY.updateMatrix();tI.setMatrixAt(i,DUMMY.matrix);tI.setColorAt(i,col.set(t[3]==="b"?"#d9d4c8":"#4d3a2a").convertSRGBToLinear());
     for(let k=0;k<3;k++){const r=t[2]*(.55+k*.08);DUMMY.position.set(t[0]+(rnd()-.5)*t[2]*.6,y0+h*(.62+k*.1),t[1]+(rnd()-.5)*t[2]*.6);DUMMY.scale.set(r,r*(t[3]==="b"?1.25:.9),r);DUMMY.rotation.set(rnd()*3,rnd()*3,0);DUMMY.updateMatrix();
       lI.setMatrixAt(i*3+k,DUMMY.matrix);lI.setColorAt(i*3+k,col.setHSL(.24+rnd()*.06,.38+rnd()*.15,(t[3]==="b"?.32:.2)+rnd()*.08).convertSRGBToLinear())}});
   scene.add(tI,lI);
   /* wysokie tuje kolumnowe między grobami */
   for(let i=0;i<90;i++){const g=GR[Math.floor(rnd()*GR.length)];if(OLD_SECT.has(g.kw))continue;TALL.push([g.x+(rnd()<.5?-1:1)*(g.W/2+.35),g.z+(rnd()-.5)*g.L*.6,4.5+rnd()*4])}
   const tallI=new THREE.InstancedMesh(new THREE.CylinderGeometry(.25,.75,1,9),Std({color:"#ffffff",roughness:.95}),TALL.length);tallI.castShadow=true;
-  TALL.forEach((t,i)=>{DUMMY.rotation.set(0,rnd()*3,0);DUMMY.scale.set(1,t[2],1);DUMMY.position.set(t[0],t[2]/2,t[1]);DUMMY.updateMatrix();tallI.setMatrixAt(i,DUMMY.matrix);tallI.setColorAt(i,col.setHSL(.31,.42,.12+rnd()*.05).convertSRGBToLinear())});scene.add(tallI);
+  TALL.forEach((t,i)=>{DUMMY.rotation.set(0,rnd()*3,0);DUMMY.scale.set(1,t[2],1);DUMMY.position.set(t[0],t[2]/2+groundY(t[0],t[1]),t[1]);DUMMY.updateMatrix();tallI.setMatrixAt(i,DUMMY.matrix);tallI.setColorAt(i,col.setHSL(.31,.42,.12+rnd()*.05).convertSRGBToLinear())});scene.add(tallI);
   buildGraves();
   const tj=GR.filter(g=>g.thuja),thI=new THREE.InstancedMesh(new THREE.ConeGeometry(.38,2.2,8),Std({color:"#ffffff",roughness:.9}),Math.max(1,tj.length));thI.castShadow=true;
   tj.forEach((g,i)=>{const s=.8+rnd()*.5;place(DUMMY,g,(g.id%2?1:-1)*(g.W/2+.05),1.1*s,g.L/2-.2);DUMMY.scale.set(s,s,s);DUMMY.updateMatrix();thI.setMatrixAt(i,DUMMY.matrix);thI.setColorAt(i,col.setHSL(.3+rnd()*.05,.45,.16+rnd()*.06).convertSRGBToLinear())});

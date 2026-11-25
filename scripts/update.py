@@ -257,6 +257,92 @@ def fetch_photo(item):
         return uid, os.path.exists(dst)
 
 
+NMT = "https://services.gugik.gov.pl/nmt/"
+TERRAIN_STEP = 2.5
+TERRAIN_CACHE = os.path.join(ROOT, ".cache", "teren.json")
+
+
+def _floats(text):
+    import re
+    return [float(v) for v in re.findall(r"-?\d+(?:\.\d+)?", text)]
+
+
+def terrain():
+    """Wysokości terenu z numerycznego modelu terenu GUGiK (Geoportal), siatka co 2,5 m."""
+    if os.path.exists(TERRAIN_CACHE):
+        with open(TERRAIN_CACHE) as f:
+            print("  teren z pamięci podręcznej")
+            return json.load(f)
+    from pyproj import Transformer
+    tr = Transformer.from_crs("EPSG:4326", "EPSG:2180", always_xy=True)
+    nx = int(SX // TERRAIN_STEP) + 1
+    nz = int(SZ // TERRAIN_STEP) + 1
+    pts = []
+    for j in range(nz):
+        for i in range(nx):
+            lon = BBOX[0] + i * TERRAIN_STEP / KX
+            lat = BBOX[3] - j * TERRAIN_STEP / KY
+            e, n = tr.transform(lon, lat)
+            pts.append((e, n))
+
+    def one(a, b):
+        r = S.get(NMT, params={"request": "GetHbyXY", "x": f"{a:.2f}", "y": f"{b:.2f}"}, timeout=30)
+        v = _floats(r.text)
+        return v[-1] if v else None
+
+    # GUGiK: x = północ, y = wschód; sprawdzamy na pierwszym punkcie, która kolejność daje sensowną wysokość
+    e0, n0 = pts[len(pts) // 2]
+    order = None
+    for cand in ((n0, e0, "NE"), (e0, n0, "EN")):
+        try:
+            h = one(cand[0], cand[1])
+            print("  próba", cand[2], "->", h)
+            if h is not None and 50 < h < 400:
+                order = cand[2]
+                break
+        except Exception as ex:
+            print("  próba nieudana", cand[2], ex)
+    if not order:
+        print("  Brak danych wysokości – teren płaski", file=sys.stderr)
+        return None
+    xy = [(n, e) if order == "NE" else (e, n) for e, n in pts]
+
+    def batch(chunk):
+        lst = ",".join(f"{a:.2f} {b:.2f}" for a, b in chunk)
+        for t in range(4):
+            try:
+                r = S.get(NMT, params={"request": "GetHByPointList", "list": lst}, timeout=60)
+                v = _floats(r.text)
+                if len(v) == 3 * len(chunk):
+                    return v[2::3]
+                if len(v) == len(chunk):
+                    return v
+                raise ValueError(f"nieoczekiwana odpowiedź ({len(v)} liczb): {r.text[:120]}")
+            except Exception as ex:
+                if t == 3:
+                    print("  partia nieudana:", ex, file=sys.stderr)
+                    return [one(a, b) for a, b in chunk]
+                time.sleep(2 + t * 2)
+
+    chunks = [xy[k:k + 150] for k in range(0, len(xy), 150)]
+    with ThreadPoolExecutor(4) as ex:
+        res = list(ex.map(batch, chunks))
+    hs = [h for part in res for h in part]
+    good = [h for h in hs if h is not None and 50 < h < 400]
+    if len(good) < 0.8 * len(hs):
+        print("  Za mało danych wysokości – teren płaski", file=sys.stderr)
+        return None
+    mean = sum(good) / len(good)
+    hs = [h if (h is not None and 50 < h < 400) else mean for h in hs]
+    base = min(hs)
+    out = {"nx": nx, "nz": nz, "step": TERRAIN_STEP, "base": round(base, 2), "cm": [int(round((h - base) * 100)) for h in hs]}
+    os.makedirs(os.path.dirname(TERRAIN_CACHE), exist_ok=True)
+    with open(TERRAIN_CACHE, "w") as f:
+        json.dump(out, f)
+    print(f"  teren: {nx}x{nz} punktów, wysokość {base:.1f}–{max(hs):.1f} m n.p.m.")
+    return out
+
+
 def main():
     os.makedirs(PHOTOS, exist_ok=True)
     if os.path.isdir(OUT):
@@ -319,7 +405,14 @@ def main():
     ents = [e for e in ENTRANCES]
     trees = [t for t in trees if not any(math.hypot(e[1] - t[0], e[2] - t[1]) < 6 for e in ents)]
 
-    data = {"g": G, "foot": foot, "trees": trees, "ent": ents, "img": {"w": round(SX, 2), "h": round(SZ, 2)},
+    print("Wysokości terenu (Geoportal)…")
+    try:
+        hgt = terrain()
+    except Exception as ex:
+        print("  teren nieudany:", ex, file=sys.stderr)
+        hgt = None
+
+    data = {"g": G, "hgt": hgt, "foot": foot, "trees": trees, "ent": ents, "img": {"w": round(SX, 2), "h": round(SZ, 2)},
             "updated": time.strftime("%Y-%m-%d")}
     with open(os.path.join(OUT, "groby.json"), "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, separators=(",", ":"))

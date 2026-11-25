@@ -29,10 +29,10 @@ jobs:
       - name: Pamięć podręczna zdjęć grobów
         uses: actions/cache@v4
         with:
-          path: .cache/zdjecia
+          path: .cache
           key: zdjecia-${{ github.run_id }}
           restore-keys: zdjecia-
-      - run: pip install requests pillow
+      - run: pip install requests pillow pyproj
       - name: Pobranie danych z cmentarz.app i zbudowanie strony
         run: python -u scripts/update.py
       - uses: actions/upload-pages-artifact@v3
