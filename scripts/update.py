@@ -286,7 +286,7 @@ def _fetch_photo(item):
 
 NMT = "https://services.gugik.gov.pl/nmt/"
 TERRAIN_STEP = 2.5
-TERRAIN_CACHE = os.path.join(ROOT, ".cache", "teren.json")
+TERRAIN_CACHE = os.path.join(ROOT, ".cache", "teren2.json")
 
 
 def _floats(text):
@@ -359,8 +359,28 @@ def terrain():
     if len(good) < 0.8 * len(hs):
         print("  Za mało danych wysokości – teren płaski", file=sys.stderr)
         return None
-    mean = sum(good) / len(good)
-    hs = [h if (h is not None and 50 < h < 400) else mean for h in hs]
+    # błędne/brakujące punkty uzupełniamy z sąsiadów (nie średnią – to dawało fałszywe garby i całe rzędy)
+    import numpy as np
+    A = np.array([h if (h is not None and 50 < h < 400) else np.nan for h in hs], float).reshape(nz, nx)
+    for _ in range(50):
+        bad = np.isnan(A)
+        if not bad.any():
+            break
+        P = np.pad(A, 1, constant_values=np.nan)
+        nb = np.stack([P[:-2, 1:-1], P[2:, 1:-1], P[1:-1, :-2], P[1:-1, 2:]])
+        fill = np.nanmean(nb, axis=0)
+        A[bad] = fill[bad]
+    A[np.isnan(A)] = np.nanmedian(A)
+    # odrzucenie szpiców: punkt wyższy/niższy od obu sąsiadów (pion lub poziom) o >0,5 m
+    for _ in range(2):
+        for j in range(1, nz - 1):
+            for i in range(1, nx - 1):
+                v = A[j, i]
+                for p, q in ((A[j - 1, i], A[j + 1, i]), (A[j, i - 1], A[j, i + 1])):
+                    if (v - p) * (v - q) > 0 and min(abs(v - p), abs(v - q)) > 0.5:
+                        A[j, i] = (p + q) / 2
+                        break
+    hs = [float(v) for v in A.ravel()]
     base = min(hs)
     out = {"nx": nx, "nz": nz, "step": TERRAIN_STEP, "base": round(base, 2), "cm": [int(round((h - base) * 100)) for h in hs]}
     os.makedirs(os.path.dirname(TERRAIN_CACHE), exist_ok=True)

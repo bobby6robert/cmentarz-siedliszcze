@@ -317,6 +317,12 @@ function hull(pts){pts=pts.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);const cr=(o
   const lo=[],up=[];for(const p of pts){while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop();lo.push(p)}
   for(let i=pts.length-1;i>=0;i--){const p=pts[i];while(up.length>=2&&cr(up[up.length-2],up[up.length-1],p)<=0)up.pop();up.push(p)}
   up.pop();lo.pop();return lo.concat(up)}
+// usuwa błędne punkty z pobranych wysokości (pojedyncze skoki i całe złe rzędy): porównanie z medianą sąsiadów
+function cleanHeights(c,nx){const nz=c.length/nx,a=c.slice(),T=50;
+  // szpic = punkt wyższy/niższy od OBU sąsiadów (w pionie lub w poziomie) o >0,5 m; zbocze skarpy zostaje nietknięte
+  for(let pass=0;pass<2;pass++)for(let j=1;j<nz-1;j++)for(let i=1;i<nx-1;i++){const k=j*nx+i,v=a[k];
+    for(const[p,q]of[[a[k-nx],a[k+nx]],[a[k-1],a[k+1]]])if((v-p)*(v-q)>0&&Math.min(Math.abs(v-p),Math.abs(v-q))>T){a[k]=(p+q)/2;break}}
+  return a}
 function grow(poly,d){const cx=poly.reduce((a,p)=>a+p[0],0)/poly.length,cz=poly.reduce((a,p)=>a+p[1],0)/poly.length;
   return poly.map(p=>{const dx=p[0]-cx,dz=p[1]-cz,l=Math.hypot(dx,dz)||1;return[p[0]+dx/l*d,p[1]+dz/l*d]})}
 function inPoly(x,z,poly){let c=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b=poly[j];if((a[1]>z)!==(b[1]>z)&&x<(b[0]-a[0])*(z-a[1])/(b[1]-a[1])+a[0])c=!c}return c}
@@ -336,7 +342,7 @@ function loadData(raw){
     for(const p of persons)PERSONS.push({gid:id,full:(p.first+" "+p.last).trim(),born:p.born,died:p.died,n:norm(p.first+" "+p.last)});
   }
   CENTER={x:GR.reduce((a,g)=>a+g.x,0)/GR.length,z:GR.reduce((a,g)=>a+g.z,0)/GR.length};
-  IMG=raw.img;FOOT=raw.foot;SITE=FOOT;HG=raw.hgt||null;
+  IMG=raw.img;FOOT=raw.foot;SITE=FOOT;HG=raw.hgt||null;if(HG)HG.cm=cleanHeights(HG.cm,HG.nx);
   DEFAULT_POINTS=raw.ent.map((e,i)=>({id:"d"+(i+1),type:"wejscie",name:e[0],x:e[1],z:e[2]}));PTS=DEFAULT_POINTS.slice();
   for(const t of raw.trees)if(!raw.ent.some(e=>Math.hypot(e[1]-t[0],e[2]-t[1])<6))TREES.push([t[0],t[1],2.6+rnd()*2.6,rnd()<.12?"b":"l"]);
   const by={};for(const g of GR)(by[g.kw]=by[g.kw]||[]).push([g.x,g.z]);
@@ -772,23 +778,60 @@ const AWAY={x:-.304,z:.953},ALONG={x:.953,z:.304},AWAY_YAW=Math.atan2(AWAY.x,AWA
 function entranceGeo(p){const P=t=>[p.x+AWAY.x*t,p.z+AWAY.z*t];const ts=[];for(let t=-9;t<=6;t+=.5)ts.push([t,groundY(...P(t))]);
   const hmin=Math.min(...ts.map(a=>a[1])),hmax=Math.max(...ts.map(a=>a[1])),d=hmax-hmin;
   const tb=(ts.find(a=>a[1]>hmin+.08*d)||ts[0])[0]-.5,tt=(ts.find(a=>a[1]>hmin+.92*d)||ts[ts.length-1])[0];
-  return{tb:Math.min(tb,-1),tt:Math.min(Math.max(tt,tb+1.5),5),P,kind:/schod/i.test(p.name)?"stairs":/brama/i.test(p.name)?"gate":"drive"}}
+  return{tb:Math.min(tb,-1),tt:Math.min(Math.max(tt,tb+1.5),5),P,kind:/brama/i.test(p.name)?"gate":/schod/i.test(p.name)?"stairs":"drive"}}
 function buildEntrances(){
-  const conc=Std({color:"#b8b2a6",roughness:.9}),metal=Std({color:"#2e3530",roughness:.45,metalness:.7}),pil=Std({color:"#a39a8d",roughness:.85});
+  // wg zdjęć ze Street View: czarne stalowe bramy przy ulicy, betonowe schody z jedną poręczą, siatka na szczycie skarpy
+  const conc=Std({color:"#a9a49b",roughness:.92}),blk=Std({color:"#17191a",roughness:.5,metalness:.6}),asph=Std({color:"#8e8a84",roughness:.95}),grey=Std({color:"#7d8079",roughness:.6,metalness:.5});
   const box=(w,h,d,m,x,y,z,ry)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.rotation.y=ry;o.castShadow=o.receiveShadow=true;scene.add(o);return o};
+  const bar=(a,b,r,m)=>{const o=new THREE.Mesh(new THREE.CylinderGeometry(r,r,a.distanceTo(b),6),m);o.position.copy(a).add(b).multiplyScalar(.5);o.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),b.clone().sub(a).normalize());o.castShadow=true;scene.add(o);return o};
+  // skrzydło bramy z pionowych prętów; open = kąt otwarcia
+  const wing=(x,y,z,len,h,sd,open)=>{const g=new THREE.Group();g.position.set(x,y,z);g.rotation.y=AWAY_YAW+Math.PI/2+sd*open;
+    const n=Math.round(len/.12);for(let k=0;k<=n;k++){const m=new THREE.Mesh(new THREE.BoxGeometry(.022,h,.022),blk);m.position.set(-sd*k*len/n,h/2+.05,0);g.add(m)}
+    for(const yy of[.12,h*.5,h]){const m=new THREE.Mesh(new THREE.BoxGeometry(len,.045,.04),blk);m.position.set(-sd*len/2,yy,0);g.add(m)}
+    g.traverse(o=>o.castShadow=true);scene.add(g)};
+  const tops=[];
   for(const p of PTS.filter(p=>p.type==="wejscie")){
     const E=entranceGeo(p);p.geo=E;
-    if(E.kind==="stairs"){const[xa,za]=E.P(E.tb),[xb,zb]=E.P(E.tt),h0=groundY(xa,za),h1=groundY(xb,zb),n=Math.max(3,Math.round((h1-h0)/.16)),run=(E.tt-E.tb)/n,rise=(h1-h0)/n;
-      for(let k=0;k<n;k++){const[x,z]=E.P(E.tb+(k+.5)*run),top=h0+(k+1)*rise,bot=Math.min(groundY(x,z),top)-.35;box(2.3,top-bot,run+.02,conc,x,(top+bot)/2,z,AWAY_YAW)}
-      for(const sd of[-1,1]){const pts=[];for(let k=0;k<=4;k++){const t=E.tb+(E.tt-E.tb)*k/4,[x,z]=E.P(t),y=h0+(h1-h0)*k/4;const px=x+ALONG.x*1.12*sd,pz=z+ALONG.z*1.12*sd;box(.05,.95,.05,metal,px,y+.47,pz,AWAY_YAW);pts.push(new THREE.Vector3(px,y+.95,pz))}
-        for(let k=0;k<4;k++){const a=pts[k],b=pts[k+1],m=new THREE.Mesh(new THREE.CylinderGeometry(.025,.025,a.distanceTo(b),6),metal);m.position.copy(a).add(b).multiplyScalar(.5);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),b.clone().sub(a).normalize());m.castShadow=true;scene.add(m)}}}
-    else{const[x,z]=E.P(E.tt-(E.kind==="gate"?0:.5)),y=groundY(x,z),wide=E.kind==="gate"?2.6:2.2;
-      for(const sd of[-1,1]){box(.6,2.4,.6,pil,x+ALONG.x*wide*sd,y+1.2,z+ALONG.z*wide*sd,AWAY_YAW);box(.75,.15,.75,pil,x+ALONG.x*wide*sd,y+2.47,z+ALONG.z*wide*sd,AWAY_YAW)}
-      if(E.kind==="gate"){const arc=new THREE.Mesh(new THREE.TorusGeometry(wide,.06,6,28,Math.PI),metal);arc.position.set(x,y+2.4,z);arc.rotation.y=AWAY_YAW+Math.PI/2;arc.scale.set(1,.42,1);scene.add(arc);
-        box(.06,.55,.06,metal,x,y+2.4+wide*.42+.25,z,AWAY_YAW);box(.32,.06,.06,metal,x,y+2.4+wide*.42+.38,z,AWAY_YAW);
-        for(const sd of[-1,1]){const wing=new THREE.Group();wing.position.set(x+ALONG.x*(wide-.3)*sd,y,z+ALONG.z*(wide-.3)*sd);wing.rotation.y=AWAY_YAW+Math.PI/2+sd*1.1;
-          for(let k=0;k<11;k++){const m=new THREE.Mesh(new THREE.BoxGeometry(.025,1.7,.025),metal);m.position.set(-sd*(k*.21+.1),.95,0);wing.add(m)}
-          for(const yy of[.2,1.75]){const m=new THREE.Mesh(new THREE.BoxGeometry(2.3,.05,.04),metal);m.position.set(-sd*1.15,yy,0);wing.add(m)}scene.add(wing)}}}}}
+    if(E.kind==="stairs"){const[xa,za]=E.P(E.tb),[xb,zb]=E.P(E.tt),h0=groundY(xa,za),h1=groundY(xb,zb),n=Math.max(3,Math.round((h1-h0)/.17)),run=(E.tt-E.tb)/n,rise=(h1-h0)/n,W=1.5;
+      for(let k=0;k<n;k++){const[x,z]=E.P(E.tb+(k+.5)*run),top=h0+(k+1)*rise,bot=Math.min(groundY(x,z),top)-.4;box(W,top-bot,run+.03,conc,x,(top+bot)/2,z,AWAY_YAW)}
+      // jedna poręcz po prawej stronie idąc w górę
+      const sd=-1,pts=[];for(let k=0;k<=3;k++){const t=E.tb+.3+(E.tt-E.tb-.3)*k/3,[x,z]=E.P(t),y=h0+(h1-h0)*(t-E.tb)/(E.tt-E.tb);const px=x+ALONG.x*(W/2+.2)*sd,pz=z+ALONG.z*(W/2+.2)*sd;
+        bar(new THREE.Vector3(px,y-.3,pz),new THREE.Vector3(px,y+.9,pz),.025,blk);pts.push(new THREE.Vector3(px,y+.9,pz))}
+      for(let k=0;k<3;k++)bar(pts[k],pts[k+1],.022,blk);
+      if(/przej/i.test(p.name)){// furtka na górze i znak przejścia dla pieszych na dole
+        const[x,z]=E.P(E.tt+.4),y=groundY(x,z);for(const s2 of[-1,1])box(.07,1.7,.07,blk,x+ALONG.x*.7*s2,y+.85,z+ALONG.z*.7*s2,AWAY_YAW);
+        wing(x+ALONG.x*.68,y,z+ALONG.z*.68,1.36,1.5,1,.25);
+        const[sx,sz]=E.P(E.tb-.6),sy=groundY(sx-ALONG.x*2.2,sz-ALONG.z*2.2);const px=sx-ALONG.x*2.2,pz=sz-ALONG.z*2.2;
+        box(.05,2.3,.05,grey,px,sy+1.15,pz,AWAY_YAW);const sg=box(.6,.6,.03,Std({color:"#1f5fb4",roughness:.5}),px,sy+2.2,pz-.0,AWAY_YAW);
+        const tri=new THREE.Mesh(new THREE.CircleGeometry(.24,3),Std({color:"#ffffff",roughness:.5}));tri.position.set(px-AWAY.x*.02,sy+2.2,pz-AWAY.z*.02);tri.rotation.set(0,AWAY_YAW+Math.PI,Math.PI/2);scene.add(tri)}
+      tops.push([E.P(E.tt+.4),1.6])}
+    else{// brama na poziomie ulicy: utwardzony wjazd + dwuskrzydłowa brama ze słupkami
+      const tg=E.tb+2.2,[x,z]=E.P(tg),y=groundY(x,z),half=2.1;
+      for(let t=E.tb-1.5;t<tg;t+=.5){const[ax,az]=E.P(t+.25);const pl=box(4.4,.06,.52,asph,ax,groundY(ax,az)+.02,az,AWAY_YAW);pl.castShadow=false}
+      for(const sd of[-1,1]){box(.1,1.85,.1,blk,x+ALONG.x*half*sd,y+.92,z+ALONG.z*half*sd,AWAY_YAW);
+        wing(x+ALONG.x*(half-.06)*sd,y,z+ALONG.z*(half-.06)*sd,half-.08,1.55,sd,sd<0?1.2:.08)}
+      tops.push([E.P(E.tt),3.5])}}
+  // ogrodzenie z siatki na szczycie skarpy wzdłuż ulicy, z przerwami na wejścia
+  if(tops.length>1){tops.sort((a,b)=>(a[0][0]*ALONG.x+a[0][1]*ALONG.z)-(b[0][0]*ALONG.x+b[0][1]*ALONG.z));
+    const line=tops.map(t=>t[0]),f0=line[0],f1=line[line.length-1];line.unshift([f0[0]-ALONG.x*40,f0[1]-ALONG.z*40]);line.push([f1[0]+ALONG.x*40,f1[1]+ALONG.z*40]);
+    const mc=document.createElement("canvas");mc.width=mc.height=64;const mx=mc.getContext("2d");mx.strokeStyle="#8a8f8c";mx.lineWidth=2.2;mx.beginPath();mx.moveTo(0,0);mx.lineTo(64,64);mx.moveTo(64,0);mx.lineTo(0,64);mx.stroke();
+    const mt=new THREE.CanvasTexture(mc);mt.wrapS=mt.wrapT=THREE.RepeatWrapping;mt.encoding=THREE.sRGBEncoding;
+    const pos=[],uv=[],idx=[];let u=0;
+    const gap=(x,z)=>tops.some(([q,r])=>Math.hypot(x-q[0],z-q[1])<r);
+    for(let i=0;i<line.length-1;i++){const[a0,b0]=line[i],[a1,b1]=line[i+1],L=Math.hypot(a1-a0,b1-b0),n=Math.max(1,Math.round(L/2.5));
+      for(let k=0;k<n;k++){const xa=a0+(a1-a0)*k/n,za=b0+(b1-b0)*k/n,xb=a0+(a1-a0)*(k+1)/n,zb=b0+(b1-b0)*(k+1)/n;
+        const ya=groundY(xa,za),yb=groundY(xb,zb),d=Math.hypot(xb-xa,zb-za);
+        if(!gap(xa,za))bar(new THREE.Vector3(xa,ya-.2,za),new THREE.Vector3(xa,ya+1.55,za),.03,grey);
+        if(gap(xa,za)||gap(xb,zb)){u+=d;continue}
+        const v=pos.length/3;pos.push(xa,ya+.05,za,xb,yb+.05,zb,xb,yb+1.5,zb,xa,ya+1.5,za);uv.push(u/.18,0,(u+d)/.18,0,(u+d)/.18,1.45/.18,u/.18,1.45/.18);idx.push(v,v+1,v+2,v,v+2,v+3);u+=d}}
+    const gg=new THREE.BufferGeometry();gg.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));gg.setAttribute("uv",new THREE.Float32BufferAttribute(uv,2));gg.setIndex(idx);gg.computeVertexNormals();
+    const fm=new THREE.Mesh(gg,new THREE.MeshStandardMaterial({map:mt,transparent:true,alphaTest:.3,side:THREE.DoubleSide,roughness:.6,metalness:.4}));
+    const cm=document.createElement("canvas");cm.width=cm.height=64;const cx=cm.getContext("2d");cx.drawImage(mc,0,0);
+    // przezroczystość: tylko druty siatki są widoczne
+    const al=new THREE.CanvasTexture(cm);fm.material.alphaMap=al;al.wrapS=al.wrapT=THREE.RepeatWrapping;
+    const ac=cm.getContext("2d");ac.fillStyle="#000";ac.fillRect(0,0,64,64);ac.strokeStyle="#fff";ac.lineWidth=2.2;ac.beginPath();ac.moveTo(0,0);ac.lineTo(64,64);ac.moveTo(64,0);ac.lineTo(0,64);ac.stroke();al.needsUpdate=true;
+    scene.add(fm)}
+}
 
 /* ============ RUCH KAMERY ============ */
 let fly=null,introA=-2.0;
