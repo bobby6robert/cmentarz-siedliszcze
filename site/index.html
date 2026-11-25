@@ -322,13 +322,15 @@ function grow(poly,d){const cx=poly.reduce((a,p)=>a+p[0],0)/poly.length,cz=poly.
 function inPoly(x,z,poly){let c=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b=poly[j];if((a[1]>z)!==(b[1]>z)&&x<(b[0]-a[0])*(z-a[1])/(b[1]-a[1])+a[0])c=!c}return c}
 function loadData(raw){
   for(const r of raw.g){
-    const[code,kw,x,z,yaw0,L,W,ps,photo]=r;const id=GR.length,old=OLD_SECT.has(kw),h=(id*2654435761>>>0)/4294967296;
+    const[code,kw,x,z,yaw0,L,W,ps,photo,hex]=r;const id=GR.length,old=OLD_SECT.has(kw),h=(id*2654435761>>>0)/4294967296;
     const yaw=yaw0;
     const persons=ps.map(p=>({first:p[0],last:p[1],born:p[2],died:p[3]}));
     const title=persons.length?persons.map(p=>(p.first+" "+p.last).trim()).join(", "):`Grób ${code}`;
     const nr=String(code).split("/").pop();
-    const m=old?(h<.6?3:1):(h<.46?0:h<.7?1:h<.84?2:3);
-    const g={id,code,kw,nr,x,z,yaw,photo:photo||"",L:Math.max(1.6,Math.min(3,L)),W:Math.max(.8,Math.min(2.6,W)),persons,title,mat:m,
+    let m=old?(h<.6?3:1):(h<.46?0:h<.7?1:h<.84?2:3),col=null;
+    if(hex&&/^[0-9a-f]{6}$/i.test(hex)){const R=parseInt(hex.slice(0,2),16),G2=parseInt(hex.slice(2,4),16),B=parseInt(hex.slice(4,6),16),lum=(.3*R+.59*G2+.11*B)/255;
+      m=R>G2*1.22&&R>B*1.22&&lum<.6?2:lum<.27?0:lum>.58?3:1;col="#"+hex}
+    const g={id,code,kw,nr,x,z,yaw,photo:photo||"",col:col||STONES[m].base,L:Math.max(1.6,Math.min(3,L)),W:Math.max(.8,Math.min(2.6,W)),persons,title,mat:m,
       shape:old?(h*7%1<.5?3:0):Math.floor(h*13%1*3),h:old?1.2+h*7%1*.4:.85+h*5%1*.45,real:(h*31%1)<(old?.05:.2),thuja:!old&&(h*17%1)<.1,flowers:!old&&(h*23%1)<.28};
     GR.push(g);BYCODE[code]=g;
     for(const p of persons)PERSONS.push({gid:id,full:(p.first+" "+p.last).trim(),born:p.born,died:p.died,n:norm(p.first+" "+p.last)});
@@ -514,7 +516,7 @@ function mapStatic(cv,full){
   const rect=(x0,z0,x1,z1,col)=>{const[a,b]=P(x0,z0);ctx.fillStyle=col;ctx.fillRect(a,b,(x1-x0)*s,(z1-z0)*s)};
   ctx.fillStyle="#e7e3d6";ctx.fillRect(0,0,c.width,c.height);
   if(PHOTO&&PHOTO.complete&&PHOTO.naturalWidth){const[a,b]=P(0,0);ctx.drawImage(PHOTO,a,b,IMG.w*s,IMG.h*s)}
-  else{poly(ctx,P,SITE,"#b4c99a");for(const g of GR){ctx.save();const[a,b]=P(g.x,g.z);ctx.translate(a,b);ctx.rotate(-g.yaw);ctx.fillStyle="#8a8b88";ctx.fillRect(-g.W*s/2,-g.L*s/2,g.W*s,g.L*s);ctx.restore()}}
+  else{poly(ctx,P,SITE,"#b4c99a");for(const g of GR){ctx.save();const[a,b]=P(g.x,g.z);ctx.translate(a,b);ctx.rotate(-g.yaw);ctx.fillStyle=g.col;ctx.fillRect(-g.W*s/2,-g.L*s/2,g.W*s,g.L*s);ctx.restore()}}
   ctx.fillStyle="#ffb63a";for(const g of GR)if(hasCandle(g)){const[a,b]=P(g.x,g.z);ctx.beginPath();ctx.arc(a,b,Math.max(1,s*.45),0,7);ctx.fill()}
   if(full){
     ctx.textAlign="center";ctx.textBaseline="middle";const ink="#2b332d",fs=Math.max(12,Math.round(s*4.2));ctx.font=`700 ${fs}px "Cormorant Garamond", Georgia, serif`;
@@ -656,10 +658,11 @@ function startGL(){
   for(let i=0;i<48;i++){const c=document.createElement("canvas");c.width=256;c.height=256;const tx=new THREE.CanvasTexture(c);tx.encoding=THREE.sRGBEncoding;tx.anisotropy=8;
     const m=new THREE.Mesh(pg,new THREE.MeshStandardMaterial({map:tx,transparent:true,roughness:.35,metalness:.55}));m.visible=false;scene.add(m);labels.push({m,c,tex:tx,id:-1})}
   markerGroup=new THREE.Group();scene.add(markerGroup);
-  GL.ready=true;applyNight();buildMarkers();GR.forEach(setCandle);resize();requestAnimationFrame(loop);
+  buildEntrances();GL.ready=true;applyNight();buildMarkers();GR.forEach(setCandle);resize();requestAnimationFrame(loop);
 }
+const headW=g=>g.shape===3?.75:Math.min(1.5,g.W*.94);
 function buildGraves(){
-  const mats=STONES.map(s=>new THREE.MeshStandardMaterial({map:canvasTex(256,speckle(s.base,s.spk,5200,1.4),[1,1]),roughness:s.rough,metalness:0,envMapIntensity:1.2}));
+  const mats=STONES.map(s=>new THREE.MeshStandardMaterial({map:canvasTex(256,speckle("#e4e4e4",["#b8b8b8","#ffffff","#9c9c9c","#d0d0d0"],5200,1.4),[1,1]),roughness:s.rough,metalness:0,envMapIntensity:1.3}));
   const curbG=new THREE.BoxGeometry(1,.22,1),coverG=new THREE.BoxGeometry(1,.07,1),plinthG=new THREE.BoxGeometry(1,.22,.36);
   const mk=kind=>{const s=new THREE.Shape(),hw=.5,h=1;
     if(kind===0){s.moveTo(-hw,0);s.lineTo(-hw,h-.18);s.quadraticCurveTo(0,h+.14,hw,h-.18);s.lineTo(hw,0)}
@@ -672,14 +675,14 @@ function buildGraves(){
     const gs=GR.filter(g=>g.mat===m);if(!gs.length)continue;
     const curb=new THREE.InstancedMesh(curbG,mats[m],gs.length),cover=new THREE.InstancedMesh(coverG,mats[m],gs.length),pl=new THREE.InstancedMesh(plinthG,mats[m],gs.length);
     [curb,cover,pl].forEach(o=>{o.castShadow=true;o.receiveShadow=true});
-    gs.forEach((g,i)=>{const L=g.L*.94,W=g.W*.94;
+    gs.forEach((g,i)=>{const L=g.L*.94,W=g.W*.94,cc=lin(g.col);curb.setColorAt(i,cc);cover.setColorAt(i,cc);pl.setColorAt(i,cc);
       place(DUMMY,g,0,.11,0);DUMMY.scale.set(W,1,L);DUMMY.updateMatrix();curb.setMatrixAt(i,DUMMY.matrix);
       place(DUMMY,g,0,.255,-.1);DUMMY.scale.set(W*.84,1,L*.84);DUMMY.updateMatrix();cover.setMatrixAt(i,DUMMY.matrix);
       place(DUMMY,g,0,.33,L/2-.18);DUMMY.scale.set(W,1,1);DUMMY.updateMatrix();pl.setMatrixAt(i,DUMMY.matrix)});
     scene.add(curb,cover,pl);
     for(let k=0;k<SH.length;k++){const hs=gs.filter(g=>g.shape===k);if(!hs.length)continue;
       const im=new THREE.InstancedMesh(SH[k],mats[m],hs.length);im.castShadow=true;im.receiveShadow=true;im.userData.ids=hs.map(g=>g.id);
-      hs.forEach((g,i)=>{const w=g.shape===3?.75:Math.min(1.25,g.W*.82);place(DUMMY,g,0,.44,g.L*.47-.18);DUMMY.scale.set(w,g.h,1);DUMMY.updateMatrix();im.setMatrixAt(i,DUMMY.matrix)});
+      hs.forEach((g,i)=>{const w=headW(g);place(DUMMY,g,0,.44,g.L*.47-.18);DUMMY.scale.set(w,g.h,1.6);DUMMY.updateMatrix();im.setMatrixAt(i,DUMMY.matrix);im.setColorAt(i,lin(g.col))});
       scene.add(im);headMeshes.push(im)}
   }
 }
@@ -716,7 +719,7 @@ function applyNight(){
   const rt=pmrem.fromEquirectangular(et);et.dispose();if(scene.environment)scene.environment.dispose();scene.environment=rt.texture;
 }
 function paintLabel(Lb,g){
-  const x=Lb.c.getContext("2d"),gold=STONES[g.mat].gold,ps=g.persons.slice(0,3);x.clearRect(0,0,256,256);
+  const x=Lb.c.getContext("2d"),cl=new THREE.Color(g.col),gold=(.3*cl.r+.59*cl.g+.11*cl.b)<.45,ps=g.persons.slice(0,3);x.clearRect(0,0,256,256);
   x.fillStyle=gold?"#e2c27a":"#1a1a1a";x.textAlign="center";
   const cross=g.shape!==3;let y=cross?40:26;
   if(cross){x.font="700 28px Georgia, serif";x.fillText("✝",128,y);y+=32}
@@ -735,15 +738,38 @@ function updateLabels(){
   const ids=new Set(want.map(g=>g.id)),free=labels.filter(Lb=>!ids.has(Lb.id)),have=new Set(labels.map(Lb=>Lb.id));
   for(const g of want){if(have.has(g.id))continue;const Lb=free.pop();if(!Lb)break;paintLabel(Lb,g)}
   for(const Lb of labels){if(Lb.id<0||!ids.has(Lb.id)){Lb.m.visible=false;continue}const g=GR[Lb.id];
-    const zf=g.L*.47-.18-.075;
+    const zf=g.L*.47-.18-.105;
     if(g.shape===3){place(Lb.m,g,0,.44+g.h*.36,zf,Math.PI);Lb.m.scale.set(.6,.6,1)}
-    else{const w=Math.min(1.25,g.W*.82),s=Math.min(w*.92,g.h*.92);place(Lb.m,g,0,.44+g.h*.47,zf,Math.PI);Lb.m.scale.set(s,s,1)}Lb.m.visible=true}
+    else{const w=headW(g),s=Math.min(w*.92,g.h*.92);place(Lb.m,g,0,.44+g.h*.47,zf,Math.PI);Lb.m.scale.set(s,s,1)}Lb.m.visible=true}
   if(night){const lit=near.filter(e=>hasCandle(e[1])).slice(0,candleLights.length);
     candleLights.forEach((pl,i)=>{const e=lit[i];if(e){place(pl,e[1],((e[1].id%3)-1)*.28,.75,e[1].L*.47-.75);pl.intensity=1.0}else pl.intensity=0})}
   else candleLights.forEach(pl=>pl.intensity=0)}
 function highlight(){if(!hl)return;if(selected===null){hl.visible=false;return}const g=GR[selected];place(hl,g,0,.3,0);hl.scale.set(g.W+.15,1,g.L+.15);hl.visible=true}
 function resize(){if(!renderer)return;const r=cv.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix()}
 addEventListener("resize",()=>{resize();if(!$("map").hidden)sizeMap();drawMap()});
+
+/* ============ WEJŚCIA: brama, schody, wjazd na prawdziwym spadku terenu ============ */
+const AWAY={x:-.304,z:.953},ALONG={x:.953,z:.304},AWAY_YAW=Math.atan2(AWAY.x,AWAY.z);
+function entranceGeo(p){const P=t=>[p.x+AWAY.x*t,p.z+AWAY.z*t];const ts=[];for(let t=-9;t<=6;t+=.5)ts.push([t,groundY(...P(t))]);
+  const hmin=Math.min(...ts.map(a=>a[1])),hmax=Math.max(...ts.map(a=>a[1])),d=hmax-hmin;
+  const tb=(ts.find(a=>a[1]>hmin+.08*d)||ts[0])[0]-.5,tt=(ts.find(a=>a[1]>hmin+.92*d)||ts[ts.length-1])[0];
+  return{tb:Math.min(tb,-1),tt:Math.min(Math.max(tt,tb+1.5),5),P,kind:/schod/i.test(p.name)?"stairs":/brama/i.test(p.name)?"gate":"drive"}}
+function buildEntrances(){
+  const conc=Std({color:"#b8b2a6",roughness:.9}),metal=Std({color:"#2e3530",roughness:.45,metalness:.7}),pil=Std({color:"#a39a8d",roughness:.85});
+  const box=(w,h,d,m,x,y,z,ry)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.rotation.y=ry;o.castShadow=o.receiveShadow=true;scene.add(o);return o};
+  for(const p of PTS.filter(p=>p.type==="wejscie")){
+    const E=entranceGeo(p);p.geo=E;
+    if(E.kind==="stairs"){const[xa,za]=E.P(E.tb),[xb,zb]=E.P(E.tt),h0=groundY(xa,za),h1=groundY(xb,zb),n=Math.max(3,Math.round((h1-h0)/.16)),run=(E.tt-E.tb)/n,rise=(h1-h0)/n;
+      for(let k=0;k<n;k++){const[x,z]=E.P(E.tb+(k+.5)*run),top=h0+(k+1)*rise,bot=Math.min(groundY(x,z),top)-.35;box(2.3,top-bot,run+.02,conc,x,(top+bot)/2,z,AWAY_YAW)}
+      for(const sd of[-1,1]){const pts=[];for(let k=0;k<=4;k++){const t=E.tb+(E.tt-E.tb)*k/4,[x,z]=E.P(t),y=h0+(h1-h0)*k/4;const px=x+ALONG.x*1.12*sd,pz=z+ALONG.z*1.12*sd;box(.05,.95,.05,metal,px,y+.47,pz,AWAY_YAW);pts.push(new THREE.Vector3(px,y+.95,pz))}
+        for(let k=0;k<4;k++){const a=pts[k],b=pts[k+1],m=new THREE.Mesh(new THREE.CylinderGeometry(.025,.025,a.distanceTo(b),6),metal);m.position.copy(a).add(b).multiplyScalar(.5);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),b.clone().sub(a).normalize());m.castShadow=true;scene.add(m)}}}
+    else{const[x,z]=E.P(E.tt-(E.kind==="gate"?0:.5)),y=groundY(x,z),wide=E.kind==="gate"?2.6:2.2;
+      for(const sd of[-1,1]){box(.6,2.4,.6,pil,x+ALONG.x*wide*sd,y+1.2,z+ALONG.z*wide*sd,AWAY_YAW);box(.75,.15,.75,pil,x+ALONG.x*wide*sd,y+2.47,z+ALONG.z*wide*sd,AWAY_YAW)}
+      if(E.kind==="gate"){const arc=new THREE.Mesh(new THREE.TorusGeometry(wide,.06,6,28,Math.PI),metal);arc.position.set(x,y+2.4,z);arc.rotation.y=AWAY_YAW+Math.PI/2;arc.scale.set(1,.42,1);scene.add(arc);
+        box(.06,.55,.06,metal,x,y+2.4+wide*.42+.25,z,AWAY_YAW);box(.32,.06,.06,metal,x,y+2.4+wide*.42+.38,z,AWAY_YAW);
+        for(const sd of[-1,1]){const wing=new THREE.Group();wing.position.set(x+ALONG.x*(wide-.3)*sd,y,z+ALONG.z*(wide-.3)*sd);wing.rotation.y=AWAY_YAW+Math.PI/2+sd*1.1;
+          for(let k=0;k<11;k++){const m=new THREE.Mesh(new THREE.BoxGeometry(.025,1.7,.025),metal);m.position.set(-sd*(k*.21+.1),.95,0);wing.add(m)}
+          for(const yy of[.2,1.75]){const m=new THREE.Mesh(new THREE.BoxGeometry(2.3,.05,.04),metal);m.position.set(-sd*1.15,yy,0);wing.add(m)}scene.add(wing)}}}}}
 
 /* ============ RUCH KAMERY ============ */
 let fly=null,introA=-2.0;
@@ -756,6 +782,7 @@ function flyTo(x,z,yaw,pitch=-.06,dur=2.8){
   const toQ=new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch,yaw,0,"YXZ"));
   mode="fly";fly={t:0,dur,fromP:camera.position.clone(),fromQ:camera.quaternion.clone(),toP:new THREE.Vector3(x,groundY(x,z)+1.65,z),toQ,x,z,yaw,pitch}}
 function flyToPoint(p){if(!GR.length)return;
+  if(p.type==="wejscie"&&GL.ready){const E=p.geo||entranceGeo(p),[x,z]=E.P(E.tb-3.5);flyTo(x,z,Math.atan2(-AWAY.x,-AWAY.z),.06);return}
   const dx=CENTER.x-p.x,dz=CENTER.z-p.z;flyTo(p.x,p.z,Math.atan2(-dx,-dz),-.04)}
 function goTo(id){const g=GR[id];selected=id;highlight();const d=g.L/2+1.05;
   flyTo(g.x-Math.sin(g.yaw)*d,g.z-Math.cos(g.yaw)*d,g.yaw+Math.PI,-.3,mode==="walk"?1.4:2.6)}

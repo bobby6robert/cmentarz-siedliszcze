@@ -238,7 +238,34 @@ def trees_from_photo(im, G):
     return kept, [[round(a, 1), round(b, 1)] for a, b in hull(foot)]
 
 
+def stone_color(path):
+    """Kolor kamienia z środka zdjęcia grobu (bez trawy i nieba)."""
+    try:
+        im = Image.open(path).convert("RGB")
+        w, h = im.size
+        im = im.crop((int(w * .25), int(h * .35), int(w * .75), int(h * .85))).resize((40, 30))
+        px = []
+        for r, g, b in im.getdata():
+            hh, ss, vv = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+            if ss > .28 and .17 < hh < .72:  # zieleń, niebo
+                continue
+            px.append((r, g, b))
+        if len(px) < 120:
+            return ""
+        px.sort(key=lambda c: sum(c))
+        mid = px[len(px) // 4: len(px) * 3 // 4]
+        r, g, b = (sum(c[i] for c in mid) // len(mid) for i in range(3))
+        return "%02x%02x%02x" % (r, g, b)
+    except Exception:
+        return ""
+
+
 def fetch_photo(item):
+    uid, ok = _fetch_photo(item)
+    return uid, ok, stone_color(os.path.join(PHOTOS, uid + ".jpg")) if ok else ""
+
+
+def _fetch_photo(item):
     uid, path = item
     dst = os.path.join(PHOTOS, uid + ".jpg")
     stamp = dst + ".src"
@@ -389,8 +416,11 @@ def main():
 
     print("Zdjęcia grobów:", len(photo_jobs))
     with ThreadPoolExecutor(8) as ex:
-        ok = dict(ex.map(fetch_photo, photo_jobs))
+        res = list(ex.map(fetch_photo, photo_jobs))
+    ok = {u: good for u, good, _ in res}
+    col = {u: c for u, _, c in res}
     for g in G:
+        g.append(col.get(g[8], "") if g[8] else "")
         if g[8] and not ok.get(g[8]):
             g[8] = ""
     keep = {uid + ".jpg" for uid, good in ok.items() if good}
