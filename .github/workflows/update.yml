@@ -34,7 +34,7 @@ jobs:
           restore-keys: zdjecia-
       - run: pip install requests pillow
       - name: Pobranie danych z cmentarz.app i zbudowanie strony
-        run: python scripts/update.py
+        run: python -u scripts/update.py
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

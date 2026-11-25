@@ -473,7 +473,7 @@ async function uploadPhoto(file){
   let q=.86,blob;do{blob=await new Promise(r=>c.toBlob(r,"image/jpeg",q));q-=.12}while(blob.size>19e6&&q>.3);
   const r=await assets.upload(blob,{type:"image/jpeg"});return{id:r.id,pano:isPano}}
 const uploadMsg=e=>({too_large:"Zdjęcie jest za duże.",unsupported_type:"Ten rodzaj pliku nie jest obsługiwany. Wybierz JPG lub PNG.",quota_or_state:"Brak miejsca na zdjęcia.",rate_limited:"Za dużo prób naraz. Spróbuj za chwilę.",no_assets:"Zdjęcia może dodawać tylko właściciel strony."}[e&&e.code]||"Nie udało się zapisać. Spróbuj ponownie.");
-let placing=false,placeAt=null;
+let placing=false,placeAt=null;const EDIT=/wejscia/.test(location.hash+location.search);
 $("addPoint").onclick=()=>{placing=true;setView(true);showTip("Kliknij na mapie miejsce nowego punktu")};
 function showTip(t){$("tip").textContent=t;$("tip").hidden=!t}
 function openAdd(x,z){placing=false;showTip("");placeAt={x,z};$("aWhere").textContent=`Miejsce: ${whereAt(x,z)}`;$("aName").value="";$("aFile").value="";$("aErr").hidden=true;
@@ -544,6 +544,8 @@ function nearest(x,z,max=3){let best=null,bd=max;const cx=Math.floor(x/6),cz=Mat
 let SITE_IN=[];
 const walkable=(x,z)=>inPoly(x,z,SITE_IN);
 function clickMap(cv,ev,full){const[x,z]=mapToWorld(cv,ev);
+  if(EDIT){const n=prompt("Nazwa wejścia (np. Brama główna):","Wejście "+(PTS.length+1));if(n===null)return;
+    PTS.push({id:"e"+Date.now(),type:"wejscie",name:n.trim()||("Wejście "+(PTS.length+1)),x:+x.toFixed(1),z:+z.toFixed(1)});onPointsChange();editPanel();return}
   if(placing){if(inPoly(x,z,SITE))openAdd(x,z);return}
   const pt=PTS.find(p=>Math.hypot(p.x-x,p.z-z)<(full?4:6));if(pt){openPoint(pt);return}
   const g=nearest(x,z,full?2:4);if(g){goTo(g.id);openGrave(g.id);return}
@@ -794,6 +796,16 @@ cv.addEventListener("pointermove",e=>{if(!drag){if(mode==="walk"&&GL.ready&&e.po
   player.yaw=drag.yaw+dx*.0045;player.pitch=Math.max(-.9,Math.min(.55,drag.pitch+dy*.0035))});
 cv.addEventListener("pointerup",e=>{if(drag&&drag.moved<6&&GL.ready){const h=pickAt(e);if(h&&h.p)openPoint(h.p);else if(h)openGrave(h.g)}drag=null});
 
+/* ============ TRYB ZAZNACZANIA WEJŚĆ (adres strony z #wejscia) ============ */
+function editPanel(){let b=$("editBar");
+  if(!b){b=document.createElement("div");b.id="editBar";b.style.cssText="position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:70;background:#fff;color:#1c1f1d;border-radius:12px;box-shadow:0 8px 30px #0006;padding:12px 14px;max-width:min(640px,calc(100% - 32px));font:15px/1.4 'Source Sans 3',Arial,sans-serif";document.body.appendChild(b)}
+  const txt=JSON.stringify(PTS.map(p=>[p.name,p.x,p.z]));
+  b.innerHTML=`<b>Zaznaczone wejścia: ${PTS.length}</b><div style="margin:6px 0;max-height:120px;overflow:auto">${PTS.map((p,i)=>`${i+1}. ${esc(p.name)}`).join("<br>")||"Kliknij na mapie pierwsze wejście."}</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="button" id="edCopy">Kopiuj wynik</button><button class="btn ghost" type="button" id="edUndo">Cofnij ostatnie</button></div>
+  <textarea id="edOut" readonly style="width:100%;margin-top:8px;font:12px monospace;height:54px">${esc(txt)}</textarea><div id="edMsg" class="note"></div>`;
+  $("edUndo").onclick=()=>{PTS.pop();onPointsChange();editPanel()};
+  $("edCopy").onclick=async()=>{const t=$("edOut");try{await navigator.clipboard.writeText(t.value);$("edMsg").textContent="Skopiowane. Wklej to w rozmowie z Claude."}catch(e){t.select();$("edMsg").textContent="Zaznaczyłem tekst – naciśnij Ctrl+C, a potem wklej w rozmowie z Claude."}}}
+
 /* ============ START ============ */
 onPointsChange();onMemoryChange();initMemory();
 const introP=document.querySelector("#intro p"),introText=introP.textContent;
@@ -807,6 +819,7 @@ introP.textContent="Wczytuję plan cmentarza i listę pochowanych…";$("gates")
   try{startGL();const a=aerialPose(introA);camera.position.copy(a.p);camera.lookAt(a.t)}
   catch(e){$("stage").insertAdjacentHTML("beforeend",'<div class="ov nogl">Ta przeglądarka nie pokazuje widoku 3D. Użyj mapy.</div>');$("intro").classList.add("out");$("hud").hidden=false;setView(true)}
   onMemoryChange();$("q").dispatchEvent(new Event("input"));
+  if(EDIT){PTS=[];onPointsChange();$("intro").classList.add("out");$("hud").hidden=false;setView(true);showTip("Tryb zaznaczania wejść: kliknij na mapie każde prawdziwe wejście");editPanel()}
 })
 .catch(()=>{introP.textContent="Nie udało się wczytać planu cmentarza. Odśwież stronę."});
 })();
