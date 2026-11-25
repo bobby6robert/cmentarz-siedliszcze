@@ -219,15 +219,15 @@ def trees_from_photo(im, G):
                     for dj in (-6, 0, 6):
                         r, g, b = px[i + di, j + dj]
                         h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
-                        if 0.18 < h < 0.42 and s > 0.35 and v < 0.42 and g > r:
+                        if 0.18 < h < 0.42 and s > 0.38 and v < 0.36 and g > r:
                             cnt += 1
-                if cnt >= 7 and not near_grave(x, z, 2.2):
+                if cnt >= 8 and not near_grave(x, z, 2.6):
                     found.append([round(x, 1), round(z, 1)])
             x += step
         z += step
     kept = []
     for t in found:
-        if all(math.hypot(t[0] - k[0], t[1] - k[1]) > 3.6 for k in kept[-400:]):
+        if all(math.hypot(t[0] - k[0], t[1] - k[1]) > 4.8 for k in kept[-400:]):
             kept.append(t)
     foot = []
     for j in range(0, IH, 8):
@@ -370,6 +370,70 @@ def terrain():
     return out
 
 
+def shadow_orient(G):
+    """Ustala, z której strony grobu stoi pomnik, po cieniu na zdjęciu z drona (wysoka rozdzielczość)."""
+    import numpy as np
+    W2, H2 = IMG_W * 2, IMG_H * 2
+    q = urllib.parse.urlencode({
+        "SERVICE": "WMS", "VERSION": "1.1.1", "REQUEST": "GetMap", "LAYERS": LAYER, "STYLES": "",
+        "SRS": "EPSG:4326", "BBOX": ",".join(map(str, BBOX)), "WIDTH": W2, "HEIGHT": H2, "FORMAT": "image/jpeg"})
+    r = S.get(f"{WMS}?{q}", timeout=240)
+    r.raise_for_status()
+    lum = np.asarray(Image.open(io.BytesIO(r.content)).convert("L"), dtype=np.float32)
+    sx, sz = W2 / SX, H2 / SZ
+
+    def prof(g):
+        dx, dz = math.sin(g[4]), math.cos(g[4])
+        L, W = g[5], g[6]
+        ts = np.arange(-L / 2 - 0.9, L / 2 + 0.9, 0.08)
+        ls = np.linspace(-W * 0.3, W * 0.3, 5)
+        vals = []
+        for t in ts:
+            xs = g[2] + dx * t + dz * ls
+            zs = g[3] + dz * t - dx * ls
+            i = np.clip((xs * sx).astype(int), 0, W2 - 1)
+            j = np.clip((zs * sz).astype(int), 0, H2 - 1)
+            vals.append(lum[j, i].mean())
+        v = np.convolve(np.array(vals), np.ones(5) / 5, mode="same")
+        k = int(np.argmin(v[3:-3])) + 3
+        contrast = float(np.median(v) - v[k])
+        t = float(ts[k])
+        if contrast < 14:
+            return None
+        if t >= L / 2:
+            return "+out"
+        if t > L / 2 - 0.8:
+            return "+in"
+        if t <= -L / 2:
+            return "-out"
+        if t < -L / 2 + 0.8:
+            return "-in"
+        return None
+
+    zones = [prof(g) for g in G]
+    cnt = {z: zones.count(z) for z in ("+out", "+in", "-out", "-in")}
+    a = cnt["+out"] + cnt["-in"]
+    b = cnt["-out"] + cnt["+in"]
+    print("  cienie:", cnt)
+    if max(a, b) < 200 or max(a, b) < 1.3 * min(a, b):
+        print("  cienie niejednoznaczne – zostaje dotychczasowe ustawienie")
+        return
+    head_plus = {"+out", "+in"} if a >= b else set()
+    # wzór A (a>=b): cień za pomnikiem po stronie "+" => "+out" = pomnik z przodu (+), "-in" = pomnik z tyłu (-)
+    use = ("+out", "-in") if a >= b else ("-out", "+in")
+    flipped = kept = 0
+    for g, z in zip(G, zones):
+        if z not in use:
+            continue
+        plus = z in ("+out", "+in")
+        if not plus:
+            g[4] = round(g[4] + math.pi if g[4] < 0 else g[4] - math.pi, 3)
+            flipped += 1
+        else:
+            kept += 1
+    print(f"  pomnik ustalony z cienia: {kept + flipped} grobów (obróconych: {flipped})")
+
+
 def main():
     os.makedirs(PHOTOS, exist_ok=True)
     if os.path.isdir(OUT):
@@ -413,6 +477,11 @@ def main():
         G.append([g["name"], g.get("sector") or "", round(x, 2), round(z, 2), round(yaw, 3), round(L, 2), round(W, 2),
                   by_grave.get(uid, []), uid if photo else ""])
     orient(G)
+    print("Kierunek pomników z cieni na zdjęciu…")
+    try:
+        shadow_orient(G)
+    except Exception as ex:
+        print("  analiza cieni nieudana:", ex, file=sys.stderr)
 
     print("Zdjęcia grobów:", len(photo_jobs))
     with ThreadPoolExecutor(8) as ex:

@@ -331,7 +331,7 @@ function loadData(raw){
     if(hex&&/^[0-9a-f]{6}$/i.test(hex)){const R=parseInt(hex.slice(0,2),16),G2=parseInt(hex.slice(2,4),16),B=parseInt(hex.slice(4,6),16),lum=(.3*R+.59*G2+.11*B)/255;
       m=R>G2*1.22&&R>B*1.22&&lum<.6?2:lum<.27?0:lum>.58?3:1;col="#"+hex}
     const g={id,code,kw,nr,x,z,yaw,photo:photo||"",col:col||STONES[m].base,L:Math.max(1.6,Math.min(3,L)),W:Math.max(.8,Math.min(2.6,W)),persons,title,mat:m,
-      shape:old?(h*7%1<.5?3:0):Math.floor(h*13%1*3),h:old?1.2+h*7%1*.4:.85+h*5%1*.45,real:(h*31%1)<(old?.05:.2),thuja:!old&&(h*17%1)<.1,flowers:!old&&(h*23%1)<.28};
+      shape:old?(h*7%1<.5?3:0):Math.floor(h*13%1*3),h:old?1.2+h*7%1*.4:.85+h*5%1*.45,real:(h*31%1)<(old?.05:.2),thuja:!old&&(h*17%1)<.05,flowers:!old&&(h*23%1)<.28};
     GR.push(g);BYCODE[code]=g;
     for(const p of persons)PERSONS.push({gid:id,full:(p.first+" "+p.last).trim(),born:p.born,died:p.died,n:norm(p.first+" "+p.last)});
   }
@@ -637,7 +637,7 @@ function startGL(){
       lI.setMatrixAt(i*3+k,DUMMY.matrix);lI.setColorAt(i*3+k,col.setHSL(.24+rnd()*.06,.38+rnd()*.15,(t[3]==="b"?.32:.2)+rnd()*.08).convertSRGBToLinear())}});
   scene.add(tI,lI);
   /* wysokie tuje kolumnowe między grobami */
-  for(let i=0;i<90;i++){const g=GR[Math.floor(rnd()*GR.length)];if(OLD_SECT.has(g.kw))continue;TALL.push([g.x+(rnd()<.5?-1:1)*(g.W/2+.35),g.z+(rnd()-.5)*g.L*.6,4.5+rnd()*4])}
+  for(let i=0;i<25;i++){const g=GR[Math.floor(rnd()*GR.length)];if(OLD_SECT.has(g.kw))continue;TALL.push([g.x+(rnd()<.5?-1:1)*(g.W/2+.35),g.z+(rnd()-.5)*g.L*.6,4.5+rnd()*4])}
   const tallI=new THREE.InstancedMesh(new THREE.CylinderGeometry(.25,.75,1,9),Std({color:"#ffffff",roughness:.95}),TALL.length);tallI.castShadow=true;
   TALL.forEach((t,i)=>{DUMMY.rotation.set(0,rnd()*3,0);DUMMY.scale.set(1,t[2],1);DUMMY.position.set(t[0],t[2]/2+groundY(t[0],t[1]),t[1]);DUMMY.updateMatrix();tallI.setMatrixAt(i,DUMMY.matrix);tallI.setColorAt(i,col.setHSL(.31,.42,.12+rnd()*.05).convertSRGBToLinear())});scene.add(tallI);
   buildGraves();

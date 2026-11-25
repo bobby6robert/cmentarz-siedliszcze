@@ -32,7 +32,7 @@ jobs:
           path: .cache
           key: zdjecia-${{ github.run_id }}
           restore-keys: zdjecia-
-      - run: pip install requests pillow pyproj
+      - run: pip install requests pillow pyproj numpy
       - name: Pobranie danych z cmentarz.app i zbudowanie strony
         run: python -u scripts/update.py
       - uses: actions/upload-pages-artifact@v3
