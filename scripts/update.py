@@ -51,7 +51,7 @@ OUT = os.path.join(ROOT, "_site")
 PHOTOS = os.path.join(ROOT, ".cache", "zdjecia")  # zachowywane między uruchomieniami (actions/cache)
 
 S = requests.Session()
-S.headers["User-Agent"] = "cmentarz-siedliszcze-bot (strona parafialna, za zgodą zarządcy)"
+S.headers["User-Agent"] = "cmentarz-siedliszcze-bot (parish website, with cemetery manager consent)"
 
 
 def get_json(url, tries=4):
