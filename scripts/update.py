@@ -37,12 +37,10 @@ OZ = (BBOX[3] - LAT0) * KY
 AWAY = (-0.304, 0.953)  # kierunek "od ulicy Szpitalnej w głąb" w układzie (X, Z)
 
 ENTRANCES = [
-    ["Furtka w rogu od ulicy", 51.8, 22.9],
-    ["Ścieżka wzdłuż zachodniej alejki", 111.1, 42.3],
-    ["Schody przy przejściu", 156.0, 54.8],
-    ["Przejście w żywopłocie", 189.5, 77.0],
-    ["Wejście przy drugim przejściu", 240.9, 97.8],
-    ["Polna droga od wschodu", 218.8, 162.3],
+    ["Brama główna (wjazd)", 110.4, 43.0],
+    ["Schody przy przejściu dla pieszych", 147.4, 56.5],
+    ["Drugie schody", 189.5, 77.3],
+    ["Wjazd wschodni", 247.1, 99.5],
 ]
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
