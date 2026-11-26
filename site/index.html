@@ -817,7 +817,7 @@ function buildEntrances(){
   const box=(w,h,d,m,x,y,z,ry)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.rotation.y=ry;o.castShadow=o.receiveShadow=true;scene.add(o);return o};
   const bar=(a,b,r,m)=>{const o=new THREE.Mesh(new THREE.CylinderGeometry(r,r,a.distanceTo(b),6),m);o.position.copy(a).add(b).multiplyScalar(.5);o.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),b.clone().sub(a).normalize());o.castShadow=true;scene.add(o);return o};
   // skrzydło bramy z pionowych prętów; open = kąt otwarcia
-  const wing=(x,y,z,len,h,sd,open)=>{const g=new THREE.Group();g.position.set(x,y,z);g.rotation.y=AWAY_YAW+Math.PI/2+sd*open;
+  const wing=(x,y,z,len,h,sd,open)=>{const g=new THREE.Group();g.position.set(x,y,z);g.rotation.y=AWAY_YAW+sd*open;
     const n=Math.round(len/.12);for(let k=0;k<=n;k++){const m=new THREE.Mesh(new THREE.BoxGeometry(.022,h,.022),blk);m.position.set(-sd*k*len/n,h/2+.05,0);g.add(m)}
     for(const yy of[.12,h*.5,h]){const m=new THREE.Mesh(new THREE.BoxGeometry(len,.045,.04),blk);m.position.set(-sd*len/2,yy,0);g.add(m)}
     g.traverse(o=>o.castShadow=true);scene.add(g)};
@@ -841,8 +841,13 @@ function buildEntrances(){
       const tg=E.tb+2.2,[x,z]=E.P(tg),y=groundY(x,z),half=2.1;
       for(let t=E.tb-1.5;t<tg;t+=.5){const[ax,az]=E.P(t+.25);const pl=box(4.4,.06,.52,asph,ax,groundY(ax,az)+.02,az,AWAY_YAW);pl.castShadow=false}
       for(const sd of[-1,1]){box(.1,1.85,.1,blk,x+ALONG.x*half*sd,y+.92,z+ALONG.z*half*sd,AWAY_YAW);
-        wing(x+ALONG.x*(half-.06)*sd,y,z+ALONG.z*(half-.06)*sd,half-.08,1.55,sd,sd<0?1.2:.08)}
-      tops.push([E.P(tg),2.6])}}
+        wing(x+ALONG.x*(half-.06)*sd,y,z+ALONG.z*(half-.06)*sd,half-.08,1.55,sd,.03)}  // brama zwykle zamknięta
+      // bramka dla pieszych po prawej stronie (patrząc z ulicy na cmentarz = -ALONG)
+      const at=o=>[x-ALONG.x*o,z-ALONG.z*o],gate=(o)=>{const[a,b]=at(o),[c,d]=at(o+1.1),ya=groundY(a,b),yc=groundY(c,d);
+        box(.08,1.7,.08,blk,a,ya+.85,b,AWAY_YAW);box(.08,1.7,.08,blk,c,yc+.85,d,AWAY_YAW);wing(c,yc,d,1.0,1.4,-1,.25);tops.push([at(o+.55),.7])};
+      tops.push([E.P(tg),half+.15]);
+      if(/zachod/i.test(p.name)){tops.push([at(half+.9),.9]);gate(half+7)}   // prześwit tuż przy bramie, bramka ok. 7 m dalej
+      else gate(half+.05)}}
   // ogrodzenie z siatki na szczycie skarpy wzdłuż ulicy, z przerwami na wejścia
   if(tops.length>1){tops.sort((a,b)=>(a[0][0]*ALONG.x+a[0][1]*ALONG.z)-(b[0][0]*ALONG.x+b[0][1]*ALONG.z));
     const line=tops.map(t=>t[0]),f0=line[0],f1=line[line.length-1];line.unshift([f0[0]-ALONG.x*40,f0[1]-ALONG.z*40]);line.push([f1[0]+ALONG.x*40,f1[1]+ALONG.z*40]);
@@ -850,10 +855,10 @@ function buildEntrances(){
     const mt=new THREE.CanvasTexture(mc);mt.wrapS=mt.wrapT=THREE.RepeatWrapping;mt.encoding=THREE.sRGBEncoding;
     const pos=[],uv=[],idx=[];let u=0;
     const gap=(x,z)=>tops.some(([q,r])=>Math.hypot(x-q[0],z-q[1])<r);
-    for(let i=0;i<line.length-1;i++){const[a0,b0]=line[i],[a1,b1]=line[i+1],L=Math.hypot(a1-a0,b1-b0),n=Math.max(1,Math.round(L/2.5));
+    for(let i=0;i<line.length-1;i++){const[a0,b0]=line[i],[a1,b1]=line[i+1],L=Math.hypot(a1-a0,b1-b0),n=Math.max(1,Math.round(L/1.25));
       for(let k=0;k<n;k++){const xa=a0+(a1-a0)*k/n,za=b0+(b1-b0)*k/n,xb=a0+(a1-a0)*(k+1)/n,zb=b0+(b1-b0)*(k+1)/n;
         const ya=groundY(xa,za),yb=groundY(xb,zb),d=Math.hypot(xb-xa,zb-za);
-        if(!gap(xa,za))bar(new THREE.Vector3(xa,ya-.2,za),new THREE.Vector3(xa,ya+1.55,za),.03,grey);
+        if(!gap(xa,za)&&(k%2===0||gap(xb,zb)||gap(a0+(a1-a0)*(k-1)/n,b0+(b1-b0)*(k-1)/n)))bar(new THREE.Vector3(xa,ya-.2,za),new THREE.Vector3(xa,ya+1.55,za),.03,grey);
         if(gap(xa,za)||gap(xb,zb)){u+=d;continue}
         const v=pos.length/3;pos.push(xa,ya+.05,za,xb,yb+.05,zb,xb,yb+1.5,zb,xa,ya+1.5,za);uv.push(u/.18,0,(u+d)/.18,0,(u+d)/.18,1.45/.18,u/.18,1.45/.18);idx.push(v,v+1,v+2,v,v+2,v+3);u+=d}}
     const gg=new THREE.BufferGeometry();gg.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));gg.setAttribute("uv",new THREE.Float32BufferAttribute(uv,2));gg.setIndex(idx);gg.computeVertexNormals();
