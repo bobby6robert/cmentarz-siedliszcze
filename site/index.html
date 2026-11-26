@@ -879,8 +879,8 @@ function buildEntrances(){
         bar(new THREE.Vector3(px,y-.3,pz),new THREE.Vector3(px,y+.9,pz),.025,blk);pts.push(new THREE.Vector3(px,y+.9,pz))}
       for(let k=0;k<3;k++)bar(pts[k],pts[k+1],.022,blk);
       if(/przej/i.test(p.name)){// furtka na górze i znak przejścia dla pieszych na dole
-        const[x,z]=E.P(E.tt+.4),y=groundY(x,z);for(const s2 of[-1,1])box(.07,1.7,.07,blk,x+ALONG.x*.7*s2,y+.85,z+ALONG.z*.7*s2,AWAY_YAW);
-        wing(x+ALONG.x*.68,y,z+ALONG.z*.68,1.36,1.5,1,.25);
+        const[x,z]=E.P(E.tt+.4),y=groundY(x,z);for(const s2 of[-1,1]){box(.08,1.75,.08,blk,x+ALONG.x*1.05*s2,y+.87,z+ALONG.z*1.05*s2,AWAY_YAW);
+          wing(x+ALONG.x*1.02*s2,y,z+ALONG.z*1.02*s2,1.0,1.5,s2,-1.35)}   // brama dwuskrzydłowa, stale otwarta do środka
         const[sx,sz]=E.P(E.tb-.6),sy=groundY(sx-ALONG.x*2.2,sz-ALONG.z*2.2);const px=sx-ALONG.x*2.2,pz=sz-ALONG.z*2.2;
         box(.05,2.3,.05,grey,px,sy+1.15,pz,AWAY_YAW);const sg=box(.6,.6,.03,Std({color:"#1f5fb4",roughness:.5}),px,sy+2.2,pz-.0,AWAY_YAW);
         const tri=new THREE.Mesh(new THREE.CircleGeometry(.24,3),Std({color:"#ffffff",roughness:.5}));tri.position.set(px-AWAY.x*.02,sy+2.2,pz-AWAY.z*.02);tri.rotation.set(0,AWAY_YAW+Math.PI,Math.PI/2);scene.add(tri)}
@@ -894,11 +894,13 @@ function buildEntrances(){
       const at=o=>[x-ALONG.x*o,z-ALONG.z*o],gate=(o)=>{const[a,b]=at(o),[c,d]=at(o+1.1),ya=groundY(a,b),yc=groundY(c,d);paths.push(at(o+.55));
         box(.08,1.7,.08,blk,a,ya+.85,b,AWAY_YAW);box(.08,1.7,.08,blk,c,yc+.85,d,AWAY_YAW);wing(c,yc,d,1.0,1.4,-1,.25);tops.push([at(o+.55),.7])};
       tops.push([E.P(tg),half+.15]);street.push(E.P(tg-5));if(/główna|wschod/i.test(p.name))street.parking=E.P(tg-5);
-      if(/zachod/i.test(p.name)){const yel=Std({color:"#d9b51c",roughness:.5,metalness:.3}),r0=STREET.off(x,z),k0=AWAY.x*r0.g.n[0]+AWAY.z*r0.g.n[1],tw=(STREET.WALK-r0.o)/k0;
-        for(const sd of[-1,1]){const pts=[];for(const t of[tw-.2,tw+1.6]){const[a,b]=[x+AWAY.x*t+ALONG.x*(half+.6)*sd,z+AWAY.z*t+ALONG.z*(half+.6)*sd],yy=groundY(a,b);pts.push(new THREE.Vector3(a,yy,b));bar(new THREE.Vector3(a,yy-.1,b),new THREE.Vector3(a,yy+1,b),.03,yel)}
-          for(const h of[.5,1])bar(pts[0].clone().setY(pts[0].y+h),pts[1].clone().setY(pts[1].y+h),.025,yel)}
-tops.push([at(half+.9),.9]);gate(half+7)}   // prześwit tuż przy bramie, bramka ok. 7 m dalej
-      else gate(half+.05)}}
+      if(/zachod/i.test(p.name)){tops.push([at(half+.9),.9]);gate(half+7)}   // prześwit tuż przy bramie, bramka ok. 7 m dalej
+      else{gate(half+.05);
+        // mostek nad rowem przy chodniku i żółta barierka po lewej stronie (patrząc z ulicy)
+        const yel=Std({color:"#d9b51c",roughness:.5,metalness:.3}),r0=STREET.off(x,z),k0=AWAY.x*r0.g.n[0]+AWAY.z*r0.g.n[1],tw=(STREET.WALK-r0.o)/k0;
+        for(let t=tw-.3;t<tw+1.8;t+=.5){const[a,b]=[x+AWAY.x*t+ALONG.x*1.4,z+AWAY.z*t+ALONG.z*1.4];const pl=box(2.2,.12,.52,conc,a,groundY(a,b)+.06,b,AWAY_YAW);pl.castShadow=false}
+        const pts=[];for(const t of[tw-.2,tw+1.7]){const[a,b]=[x+AWAY.x*t+ALONG.x*2.6,z+AWAY.z*t+ALONG.z*2.6],yy=groundY(a,b);pts.push(new THREE.Vector3(a,yy,b));bar(new THREE.Vector3(a,yy-.1,b),new THREE.Vector3(a,yy+1,b),.03,yel)}
+        for(const h of[.5,1])bar(pts[0].clone().setY(pts[0].y+h),pts[1].clone().setY(pts[1].y+h),.025,yel)}}}
   // ścieżki z chodnika przez trawnik do bramek dla pieszych (wg zdjęć ze Street View)
   if(street.length>1){const sp=street.slice().sort((a,b)=>(a[0]*ALONG.x+a[1]*ALONG.z)-(b[0]*ALONG.x+b[1]*ALONG.z)),f=sp[0],l=sp[sp.length-1];
     sp.unshift([f[0]-ALONG.x*45,f[1]-ALONG.z*45]);sp.push([l[0]+ALONG.x*45,l[1]+ALONG.z*45]);
@@ -915,7 +917,7 @@ tops.push([at(half+.9),.9]);gate(half+7)}   // prześwit tuż przy bramie, bramk
   // ogrodzenie z siatki na szczycie skarpy wzdłuż ulicy, z przerwami na wejścia
   if(tops.length>1){tops.sort((a,b)=>(a[0][0]*ALONG.x+a[0][1]*ALONG.z)-(b[0][0]*ALONG.x+b[0][1]*ALONG.z));
     const keep=q=>{const r=STREET.off(q[0],q[1]),m=STREET.WALK+.6;return r.o<m?[q[0]+r.g.n[0]*(m-r.o),q[1]+r.g.n[1]*(m-r.o)]:q};
-    const line=tops.map(t=>keep(t[0])),f0=line[0],f1=line[line.length-1];line.unshift(keep([f0[0]-ALONG.x*40,f0[1]-ALONG.z*40]));line.push(keep([f1[0]+ALONG.x*40,f1[1]+ALONG.z*40]));
+    const line=tops.map(t=>keep(t[0])),f0=line[0],f1=line[line.length-1];line.unshift(keep([f0[0]-ALONG.x*40,f0[1]-ALONG.z*40]));line.push(keep([f1[0]+ALONG.x*12,f1[1]+ALONG.z*12]));
     const mc=document.createElement("canvas");mc.width=mc.height=64;const mx=mc.getContext("2d");mx.strokeStyle="#8a8f8c";mx.lineWidth=2.2;mx.beginPath();mx.moveTo(0,0);mx.lineTo(64,64);mx.moveTo(64,0);mx.lineTo(0,64);mx.stroke();
     const mt=new THREE.CanvasTexture(mc);mt.wrapS=mt.wrapT=THREE.RepeatWrapping;mt.encoding=THREE.sRGBEncoding;
     const pos=[],uv=[],idx=[];let u=0;
@@ -923,7 +925,7 @@ tops.push([at(half+.9),.9]);gate(half+7)}   // prześwit tuż przy bramie, bramk
     // od okolic bramy głównej na wschód: betonowy płot ze sztachetami (wg zdjęć), dalej na zachód siatka
     // betonowy płot z tralkami: na wschód od bramy głównej i na zachód od bramy zachodniej (wg zdjęć); pomiędzy – siatka
     const eg=PTS.find(p=>p.type==="wejscie"&&/główna/i.test(p.name)),wg=PTS.find(p=>p.type==="wejscie"&&/^brama zachod/i.test(p.name)),
-      sE=eg?STREET.off(eg.x,eg.z).s-10:1e9,sW=wg?STREET.off(wg.x,wg.z).s-1:-1e9,concrete=(x,z)=>{const q=STREET.off(x,z).s;return q>sE||q<sW};let lastPost=-9;
+      sE=eg?STREET.off(eg.x,eg.z).s-10:1e9,sW=wg?STREET.off(wg.x,wg.z).s-1:-1e9,concrete=(x,z)=>STREET.off(x,z).s<sW;let lastPost=-9;
     const cc=Std({color:"#b8b2a6",roughness:.95}),pos2=[],uv2=[],idx2=[];
     for(let i=0;i<line.length-1;i++){const[a0,b0]=line[i],[a1,b1]=line[i+1],L=Math.hypot(a1-a0,b1-b0),n=Math.max(1,Math.round(L/1.25));
       for(let k=0;k<n;k++){const xa=a0+(a1-a0)*k/n,za=b0+(b1-b0)*k/n,xb=a0+(a1-a0)*(k+1)/n,zb=b0+(b1-b0)*(k+1)/n;
