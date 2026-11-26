@@ -318,6 +318,10 @@ function hull(pts){pts=pts.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);const cr=(o
   for(let i=pts.length-1;i>=0;i--){const p=pts[i];while(up.length>=2&&cr(up[up.length-2],up[up.length-1],p)<=0)up.pop();up.push(p)}
   up.pop();lo.pop();return lo.concat(up)}
 // usuwa błędne punkty z pobranych wysokości (pojedyncze skoki i całe złe rzędy): porównanie z medianą sąsiadów
+/* ręczne poprawki wyglądu grobów (kod grobu → zmiany); shape: 0 zaokrąglony, 1 prosty, 2 fala, 3 krzyż, 4 płyta leżąca bez pomnika */
+const POPRAWKI={
+  "II/788":{shape:4,col:"#7a4e46",gold:true}, // Feliks i Danuta Braniewscy – leżąca płyta z czerwonego granitu, napis na płycie
+};
 function cleanHeights(c,nx){const nz=c.length/nx,a=c.slice(),T=50;
   // szpic = punkt wyższy/niższy od OBU sąsiadów (w pionie lub w poziomie) o >0,5 m; zbocze skarpy zostaje nietknięte
   for(let pass=0;pass<2;pass++)for(let j=1;j<nz-1;j++)for(let i=1;i<nx-1;i++){const k=j*nx+i,v=a[k];
@@ -338,6 +342,7 @@ function loadData(raw){
       m=R>G2*1.22&&R>B*1.22&&lum<.6?2:lum<.27?0:lum>.58?3:1;col="#"+hex}
     const g={id,code,kw,nr,x,z,yaw,photo:photo||"",col:col||STONES[m].base,L:Math.max(1.6,Math.min(3,L)),W:Math.max(.8,Math.min(2.6,W)),persons,title,mat:m,
       shape:old?(h*7%1<.5?3:0):Math.floor(h*13%1*3),h:old?1.2+h*7%1*.4:.85+h*5%1*.45,real:(h*31%1)<(old?.05:.2),thuja:!old&&(h*17%1)<.05,flowers:!old&&(h*23%1)<.28};
+    if(POPRAWKI[code])Object.assign(g,POPRAWKI[code]);
     GR.push(g);BYCODE[code]=g;
     for(const p of persons)PERSONS.push({gid:id,full:(p.first+" "+p.last).trim(),born:p.born,died:p.died,n:norm(p.first+" "+p.last)});
   }
@@ -669,7 +674,7 @@ function startGL(){
 const headW=g=>g.shape===3?.75:Math.min(1.5,g.W*.94);
 function buildGraves(){
   const mats=STONES.map(s=>new THREE.MeshStandardMaterial({map:canvasTex(256,speckle("#e4e4e4",["#b8b8b8","#ffffff","#9c9c9c","#d0d0d0"],5200,1.4),[1,1]),roughness:s.rough,metalness:0,envMapIntensity:1.3}));
-  const curbG=new THREE.BoxGeometry(1,.22,1),coverG=new THREE.BoxGeometry(1,.07,1),plinthG=new THREE.BoxGeometry(1,.22,.36);
+  const slabG=new THREE.BoxGeometry(1,.12,1),curbG=new THREE.BoxGeometry(1,.22,1),coverG=new THREE.BoxGeometry(1,.07,1),plinthG=new THREE.BoxGeometry(1,.22,.36);
   const mk=kind=>{const s=new THREE.Shape(),hw=.5,h=1;
     if(kind===0){s.moveTo(-hw,0);s.lineTo(-hw,h-.18);s.quadraticCurveTo(0,h+.14,hw,h-.18);s.lineTo(hw,0)}
     else if(kind===1){s.moveTo(-hw,0);s.lineTo(-hw,h-.06);s.lineTo(-hw+.06,h);s.lineTo(hw-.06,h);s.lineTo(hw,h-.06);s.lineTo(hw,0)}
@@ -680,11 +685,14 @@ function buildGraves(){
   for(let m=0;m<STONES.length;m++){
     const gs=GR.filter(g=>g.mat===m);if(!gs.length)continue;
     const curb=new THREE.InstancedMesh(curbG,mats[m],gs.length),cover=new THREE.InstancedMesh(coverG,mats[m],gs.length),pl=new THREE.InstancedMesh(plinthG,mats[m],gs.length);
+    const flat=gs.filter(g=>g.shape===4),slab=new THREE.InstancedMesh(slabG,mats[m],Math.max(1,flat.length));slab.count=flat.length;slab.userData.ids=flat.map(g=>g.id);
+    flat.forEach((g,i)=>{place(DUMMY,g,0,.35,-.05);DUMMY.scale.set(g.W*.94*.76,1,g.L*.94*.78);DUMMY.updateMatrix();slab.setMatrixAt(i,DUMMY.matrix);slab.setColorAt(i,lin(g.col))});
+    if(flat.length){slab.castShadow=slab.receiveShadow=true;scene.add(slab);headMeshes.push(slab)}
     [curb,cover,pl].forEach(o=>{o.castShadow=true;o.receiveShadow=true});
     gs.forEach((g,i)=>{const L=g.L*.94,W=g.W*.94,cc=lin(g.col);curb.setColorAt(i,cc);cover.setColorAt(i,cc);pl.setColorAt(i,cc);
       place(DUMMY,g,0,.11,0);DUMMY.scale.set(W,1,L);DUMMY.updateMatrix();curb.setMatrixAt(i,DUMMY.matrix);
       place(DUMMY,g,0,.255,-.1);DUMMY.scale.set(W*.84,1,L*.84);DUMMY.updateMatrix();cover.setMatrixAt(i,DUMMY.matrix);
-      place(DUMMY,g,0,.33,L/2-.18);DUMMY.scale.set(W,1,1);DUMMY.updateMatrix();pl.setMatrixAt(i,DUMMY.matrix)});
+      place(DUMMY,g,0,.33,L/2-.18);DUMMY.scale.set(g.shape===4?0:W,g.shape===4?0:1,g.shape===4?0:1);DUMMY.updateMatrix();pl.setMatrixAt(i,DUMMY.matrix)});
     scene.add(curb,cover,pl);
     for(let k=0;k<SH.length;k++){const hs=gs.filter(g=>g.shape===k);if(!hs.length)continue;
       const im=new THREE.InstancedMesh(SH[k],mats[m],hs.length);im.castShadow=true;im.receiveShadow=true;im.userData.ids=hs.map(g=>g.id);
@@ -693,10 +701,10 @@ function buildGraves(){
   }
 }
 function setCandle(g){
-  if(!glassI)return;const i=g.id,on=hasCandle(g)?1:0,off=((i%3)-1)*.28;
-  place(DUMMY,g,off,.39,g.L*.47-.62);DUMMY.scale.set(on,on,on);DUMMY.updateMatrix();glassI.setMatrixAt(i,DUMMY.matrix);glassI.setColorAt(i,lin(candleColor(g)));
-  place(DUMMY,g,off,.52,g.L*.47-.62);DUMMY.scale.set(on,on,on);DUMMY.updateMatrix();capI.setMatrixAt(i,DUMMY.matrix);
-  place(DUMMY,g,off,.6,g.L*.47-.62);DUMMY.scale.set(on,on,on);DUMMY.updateMatrix();flameI.setMatrixAt(i,DUMMY.matrix);
+  if(!glassI)return;const i=g.id,on=hasCandle(g)?1:0,off=((i%3)-1)*.28,fy=g.shape===4?.06:0;
+  place(DUMMY,g,off,.39+fy,g.L*.47-.62);DUMMY.scale.set(on,on,on);DUMMY.updateMatrix();glassI.setMatrixAt(i,DUMMY.matrix);glassI.setColorAt(i,lin(candleColor(g)));
+  place(DUMMY,g,off,.52+fy,g.L*.47-.62);DUMMY.scale.set(on,on,on);DUMMY.updateMatrix();capI.setMatrixAt(i,DUMMY.matrix);
+  place(DUMMY,g,off,.6+fy,g.L*.47-.62);DUMMY.scale.set(on,on,on);DUMMY.updateMatrix();flameI.setMatrixAt(i,DUMMY.matrix);
   glassI.instanceMatrix.needsUpdate=capI.instanceMatrix.needsUpdate=flameI.instanceMatrix.needsUpdate=true;if(glassI.instanceColor)glassI.instanceColor.needsUpdate=true}
 function buildMarkers(){
   if(!markerGroup)return;while(markerGroup.children.length)markerGroup.children.pop();markerSprites=[];
@@ -726,12 +734,13 @@ function applyNight(){
 }
 // obszar napisu na pomniku (metry): szerokość, wysokość, środek nad ziemią
 function labelArea(g){
+  if(g.shape===4)return{w:g.W*.94*.76*.84,h:g.L*.94*.78*.7,flat:true};
   if(g.shape===3)return{w:Math.min(.62,g.W*.8),h:.46,cross:true};
   const w=headW(g)*.84,k=g.shape===0?.74:g.shape===2?.7:.84;return{w,h:g.h*k,yc:.44+g.h*(.05+k/2)}}
 function paintLabel(Lb,g){
   const A=labelArea(g),CW=512,CH=Math.max(160,Math.min(1024,Math.round(CW*A.h/A.w)));
   if(Lb.c.height!==CH){Lb.c.height=CH;Lb.tex.dispose()}
-  const x=Lb.c.getContext("2d"),cl=new THREE.Color(g.col),gold=night||(.3*cl.r+.59*cl.g+.11*cl.b)<.45;x.clearRect(0,0,CW,CH);
+  const x=Lb.c.getContext("2d"),cl=new THREE.Color(g.col),gold=night||g.gold||(.3*cl.r+.59*cl.g+.11*cl.b)<.45;x.clearRect(0,0,CW,CH);
   // linie: [tekst, względny rozmiar, grubość]
   const H=[];if(g.shape!==3)H.push(["✝",1.3,700]);H.push(["Ś.P.",.75,600]);
   const ps=g.persons,two=ps.length>6,per=p=>{const d=`${p.born?yr(p.born)+" – ":""}${yr(p.died)}`,o=[];
@@ -763,7 +772,8 @@ function updateLabels(){
   for(const g of want){if(have.has(g.id))continue;const Lb=free.pop();if(!Lb)break;paintLabel(Lb,g)}
   for(const Lb of labels){if(Lb.id<0||!ids.has(Lb.id)){Lb.m.visible=false;continue}const g=GR[Lb.id];
     const zf=g.L*.47-.18-.124,A=Lb.A||labelArea(g);
-    if(A.cross){// krzyż: tablica leżąca ukośnie na płycie przed krzyżem
+    if(A.flat){place(Lb.m,g,0,.412,-.05,Math.PI);Lb.m.rotateX(-Math.PI/2);Lb.m.scale.set(A.w,A.h,1)}
+    else if(A.cross){// krzyż: tablica leżąca ukośnie na płycie przed krzyżem
       place(Lb.m,g,0,.43,zf-.42,Math.PI);Lb.m.rotateX(-1.05);Lb.m.scale.set(A.w,A.h,1)}
     else{place(Lb.m,g,0,A.yc,zf,Math.PI);Lb.m.scale.set(A.w,A.h,1)}Lb.m.visible=true}
   if(night){const lit=near.filter(e=>hasCandle(e[1])).slice(0,candleLights.length);
