@@ -918,7 +918,7 @@ function buildEntrances(){
   if(tops.length>1){tops.sort((a,b)=>(a[0][0]*ALONG.x+a[0][1]*ALONG.z)-(b[0][0]*ALONG.x+b[0][1]*ALONG.z));
     const keep=q=>{const r=STREET.off(q[0],q[1]),m=STREET.WALK+.6;return r.o<m?[q[0]+r.g.n[0]*(m-r.o),q[1]+r.g.n[1]*(m-r.o)]:q};
     const line=tops.map(t=>keep(t[0])),f0=line[0],f1=line[line.length-1];line.unshift([27.2,118],[29.5,108.9],[32.7,93.3],[38.9,57.5],[46.7,26.4]);  // betonowy płot: narożnik przy ulicy i zachodnia granica cmentarza (wg zdjęcia satelitarnego)
-    line.push(keep([f1[0]+ALONG.x*12,f1[1]+ALONG.z*12]));
+    line.push(keep([272,104]),[286,109],[285,150],[284,189]);  // siatka dalej wzdłuż ulicy i wschodnią granicą cmentarza (wg zdjęcia satelitarnego)
     const mc=document.createElement("canvas");mc.width=mc.height=64;const mx=mc.getContext("2d");mx.strokeStyle="#8a8f8c";mx.lineWidth=2.2;mx.beginPath();mx.moveTo(0,0);mx.lineTo(64,64);mx.moveTo(64,0);mx.lineTo(0,64);mx.stroke();
     const mt=new THREE.CanvasTexture(mc);mt.wrapS=mt.wrapT=THREE.RepeatWrapping;mt.encoding=THREE.sRGBEncoding;
     const pos=[],uv=[],idx=[];let u=0;
