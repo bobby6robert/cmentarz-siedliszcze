@@ -814,10 +814,13 @@ const AWAY={x:-.304,z:.953},ALONG={x:.953,z:.304},AWAY_YAW=Math.atan2(AWAY.x,AWA
 function entranceGeo(p){const P=t=>[p.x+AWAY.x*t,p.z+AWAY.z*t];const ts=[];for(let t=-9;t<=6;t+=.5)ts.push([t,groundY(...P(t))]);
   const hmin=Math.min(...ts.map(a=>a[1])),hmax=Math.max(...ts.map(a=>a[1])),d=hmax-hmin;
   const tb=(ts.find(a=>a[1]>hmin+.08*d)||ts[0])[0]-.5,tt=(ts.find(a=>a[1]>hmin+.92*d)||ts[ts.length-1])[0];
-  return{tb:Math.min(tb,-1),tt:Math.min(Math.max(tt,tb+1.5),5),P,kind:/bramka/i.test(p.name)?"path":/brama/i.test(p.name)?"gate":/schod/i.test(p.name)?"stairs":"drive"}}
+  const tS=pastSidewalk(p),tb2=Math.max(Math.min(tb,-1),tS);return{tb:tb2,tt:Math.min(Math.max(tt,tb2+1.5),Math.max(5,tb2+1.5)),P,kind:/bramka/i.test(p.name)?"path":/brama/i.test(p.name)?"gate":/schod/i.test(p.name)?"stairs":"drive"}}
 /* ulica Szpitalna wzdłuż cmentarza – oś odczytana ze zdjęcia z drona; pasy liczone od osi jezdni (+ w stronę cmentarza) */
+const STREET=(()=>{const A=[60,19.5],B=[275,100.9],L0=Math.hypot(B[0]-A[0],B[1]-A[1]),d=[(B[0]-A[0])/L0,(B[1]-A[1])/L0];return{A,B,L0,d,n:[-d[1],d[0]]}})();
+// najmniejsze t (wzdłuż AWAY od punktu wejścia), przy którym jesteśmy już za chodnikiem po stronie cmentarza
+function pastSidewalk(p){const{A,n}=STREET,o0=(p.x-A[0])*n[0]+(p.z-A[1])*n[1],k=AWAY.x*n[0]+AWAY.z*n[1];return(5.7-o0)/k}
 function buildStreet(){
-  const A=[60,19.5],B=[275,100.9],L0=Math.hypot(B[0]-A[0],B[1]-A[1]),d=[(B[0]-A[0])/L0,(B[1]-A[1])/L0],n=[-d[1],d[0]];
+  const{A,B,L0,d,n}=STREET;
   const tex=(w,h,draw,rx)=>{const c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d");draw(x,w,h);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.encoding=THREE.sRGBEncoding;t.anisotropy=8;return t};
   const noise=(x,w,h,base,cols,n)=>{x.fillStyle=base;x.fillRect(0,0,w,h);for(let i=0;i<n;i++){x.fillStyle=cols[i%cols.length];x.fillRect(Math.random()*w,Math.random()*h,1.5,1.5)}};
   // jezdnia: asfalt, linie krawędziowe i przerywana linia środkowa (tekstura 1 m długości na 7 m szerokości)
