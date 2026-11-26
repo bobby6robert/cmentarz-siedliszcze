@@ -810,7 +810,7 @@ const AWAY={x:-.304,z:.953},ALONG={x:.953,z:.304},AWAY_YAW=Math.atan2(AWAY.x,AWA
 function entranceGeo(p){const P=t=>[p.x+AWAY.x*t,p.z+AWAY.z*t];const ts=[];for(let t=-9;t<=6;t+=.5)ts.push([t,groundY(...P(t))]);
   const hmin=Math.min(...ts.map(a=>a[1])),hmax=Math.max(...ts.map(a=>a[1])),d=hmax-hmin;
   const tb=(ts.find(a=>a[1]>hmin+.08*d)||ts[0])[0]-.5,tt=(ts.find(a=>a[1]>hmin+.92*d)||ts[ts.length-1])[0];
-  return{tb:Math.min(tb,-1),tt:Math.min(Math.max(tt,tb+1.5),5),P,kind:/brama/i.test(p.name)?"gate":/schod/i.test(p.name)?"stairs":"drive"}}
+  return{tb:Math.min(tb,-1),tt:Math.min(Math.max(tt,tb+1.5),5),P,kind:/bramka/i.test(p.name)?"path":/brama/i.test(p.name)?"gate":/schod/i.test(p.name)?"stairs":"drive"}}
 function buildEntrances(){
   // wg zdjęć ze Street View: czarne stalowe bramy przy ulicy, betonowe schody z jedną poręczą, siatka na szczycie skarpy
   const conc=Std({color:"#a9a49b",roughness:.92}),blk=Std({color:"#17191a",roughness:.5,metalness:.6}),asph=Std({color:"#8e8a84",roughness:.95}),grey=Std({color:"#7d8079",roughness:.6,metalness:.5});
@@ -824,6 +824,7 @@ function buildEntrances(){
   const tops=[],street=[],paths=[];
   for(const p of PTS.filter(p=>p.type==="wejscie")){
     const E=entranceGeo(p);p.geo=E;
+    if(E.kind==="path")continue;  // bramka dla pieszych – rysowana razem z bramą obok
     if(E.kind==="stairs"){const[xa,za]=E.P(E.tb),[xb,zb]=E.P(E.tt),h0=groundY(xa,za),h1=groundY(xb,zb),n=Math.max(3,Math.round((h1-h0)/.17)),run=(E.tt-E.tb)/n,rise=(h1-h0)/n,W=1.5;
       for(let k=0;k<n;k++){const[x,z]=E.P(E.tb+(k+.5)*run),top=h0+(k+1)*rise,bot=Math.min(groundY(x,z),top)-.4;box(W,top-bot,run+.03,conc,x,(top+bot)/2,z,AWAY_YAW)}
       // jedna poręcz po prawej stronie idąc w górę

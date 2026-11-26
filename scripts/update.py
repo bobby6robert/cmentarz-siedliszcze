@@ -41,6 +41,7 @@ ENTRANCES = [
     ["Drugie schody", 189.5, 77.3],
     ["Schody przy przejściu dla pieszych", 147.4, 56.5],
     ["Brama zachodnia", 110.4, 43.0],
+    ["Bramka przy bramie zachodniej", 101.2, 40.1],
 ]
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
