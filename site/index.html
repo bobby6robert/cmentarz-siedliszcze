@@ -821,7 +821,7 @@ function buildEntrances(){
     const n=Math.round(len/.12);for(let k=0;k<=n;k++){const m=new THREE.Mesh(new THREE.BoxGeometry(.022,h,.022),blk);m.position.set(-sd*k*len/n,h/2+.05,0);g.add(m)}
     for(const yy of[.12,h*.5,h]){const m=new THREE.Mesh(new THREE.BoxGeometry(len,.045,.04),blk);m.position.set(-sd*len/2,yy,0);g.add(m)}
     g.traverse(o=>o.castShadow=true);scene.add(g)};
-  const tops=[];
+  const tops=[],street=[],paths=[];
   for(const p of PTS.filter(p=>p.type==="wejscie")){
     const E=entranceGeo(p);p.geo=E;
     if(E.kind==="stairs"){const[xa,za]=E.P(E.tb),[xb,zb]=E.P(E.tt),h0=groundY(xa,za),h1=groundY(xb,zb),n=Math.max(3,Math.round((h1-h0)/.17)),run=(E.tt-E.tb)/n,rise=(h1-h0)/n,W=1.5;
@@ -836,18 +836,31 @@ function buildEntrances(){
         const[sx,sz]=E.P(E.tb-.6),sy=groundY(sx-ALONG.x*2.2,sz-ALONG.z*2.2);const px=sx-ALONG.x*2.2,pz=sz-ALONG.z*2.2;
         box(.05,2.3,.05,grey,px,sy+1.15,pz,AWAY_YAW);const sg=box(.6,.6,.03,Std({color:"#1f5fb4",roughness:.5}),px,sy+2.2,pz-.0,AWAY_YAW);
         const tri=new THREE.Mesh(new THREE.CircleGeometry(.24,3),Std({color:"#ffffff",roughness:.5}));tri.position.set(px-AWAY.x*.02,sy+2.2,pz-AWAY.z*.02);tri.rotation.set(0,AWAY_YAW+Math.PI,Math.PI/2);scene.add(tri)}
-      tops.push([E.P(E.tt+.4),1.6])}
+      tops.push([E.P(E.tt+.4),1.6]);street.push(E.P(E.tb-.6))}
     else{// brama na poziomie ulicy: utwardzony wjazd + dwuskrzydłowa brama ze słupkami
       const tg=E.tb+2.2,[x,z]=E.P(tg),y=groundY(x,z),half=2.1;
-      for(let t=E.tb-1.5;t<tg;t+=.5){const[ax,az]=E.P(t+.25);const pl=box(4.4,.06,.52,asph,ax,groundY(ax,az)+.02,az,AWAY_YAW);pl.castShadow=false}
+      for(let t=tg-3.5;t<tg;t+=.5){const[ax,az]=E.P(t+.25);const pl=box(4.4,.06,.52,asph,ax,groundY(ax,az)+.02,az,AWAY_YAW);pl.castShadow=false}
       for(const sd of[-1,1]){box(.1,1.85,.1,blk,x+ALONG.x*half*sd,y+.92,z+ALONG.z*half*sd,AWAY_YAW);
         wing(x+ALONG.x*(half-.06)*sd,y,z+ALONG.z*(half-.06)*sd,half-.08,1.55,sd,.03)}  // brama zwykle zamknięta
       // bramka dla pieszych po prawej stronie (patrząc z ulicy na cmentarz = -ALONG)
-      const at=o=>[x-ALONG.x*o,z-ALONG.z*o],gate=(o)=>{const[a,b]=at(o),[c,d]=at(o+1.1),ya=groundY(a,b),yc=groundY(c,d);
+      const at=o=>[x-ALONG.x*o,z-ALONG.z*o],gate=(o)=>{const[a,b]=at(o),[c,d]=at(o+1.1),ya=groundY(a,b),yc=groundY(c,d);paths.push(at(o+.55));
         box(.08,1.7,.08,blk,a,ya+.85,b,AWAY_YAW);box(.08,1.7,.08,blk,c,yc+.85,d,AWAY_YAW);wing(c,yc,d,1.0,1.4,-1,.25);tops.push([at(o+.55),.7])};
-      tops.push([E.P(tg),half+.15]);
+      tops.push([E.P(tg),half+.15]);street.push(E.P(tg-5));if(/główna|wschod/i.test(p.name))street.parking=E.P(tg-5);
       if(/zachod/i.test(p.name)){tops.push([at(half+.9),.9]);gate(half+7)}   // prześwit tuż przy bramie, bramka ok. 7 m dalej
       else gate(half+.05)}}
+  // ścieżki z chodnika przez trawnik do bramek dla pieszych (wg zdjęć ze Street View)
+  if(street.length>1){const sp=street.slice().sort((a,b)=>(a[0]*ALONG.x+a[1]*ALONG.z)-(b[0]*ALONG.x+b[1]*ALONG.z)),f=sp[0],l=sp[sp.length-1];
+    sp.unshift([f[0]-ALONG.x*45,f[1]-ALONG.z*45]);sp.push([l[0]+ALONG.x*45,l[1]+ALONG.z*45]);
+    const ribbon=(o0,o1,mat,dy)=>{const pos=[],idx=[];
+      for(let i=0;i<sp.length-1;i++){const[a0,b0]=sp[i],[a1,b1]=sp[i+1],n=Math.max(1,Math.round(Math.hypot(a1-a0,b1-b0)));
+        for(let k=0;k<=n;k++){if(i>0&&k===0)continue;const x=a0+(a1-a0)*k/n,z=b0+(b1-b0)*k/n;
+          for(const o of[o0,o1]){const px=x-AWAY.x*o,pz=z-AWAY.z*o;pos.push(px,groundY(px,pz)+dy,pz)}}}
+      for(let v=0;v<pos.length/3-2;v+=2)idx.push(v,v+1,v+2,v+1,v+3,v+2);
+      const g=new THREE.BufferGeometry();g.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);g.computeVertexNormals();
+      const m=new THREE.Mesh(g,mat);m.material.side=THREE.DoubleSide;m.receiveShadow=true;scene.add(m)};
+    // chodnik, ulica i parking są już widoczne na zdjęciu z drona pod spodem – tu tylko ścieżki do bramek
+    // ścieżki z chodnika do bramek dla pieszych przez trawnik
+    for(const[a,b]of paths){for(let t=-5.2;t<0;t+=.6){const px=a+AWAY.x*t,pz=b+AWAY.z*t;const pl=box(1.1,.05,.62,conc,px,groundY(px,pz)+.03,pz,AWAY_YAW);pl.castShadow=false}}}
   // ogrodzenie z siatki na szczycie skarpy wzdłuż ulicy, z przerwami na wejścia
   if(tops.length>1){tops.sort((a,b)=>(a[0][0]*ALONG.x+a[0][1]*ALONG.z)-(b[0][0]*ALONG.x+b[0][1]*ALONG.z));
     const line=tops.map(t=>t[0]),f0=line[0],f1=line[line.length-1];line.unshift([f0[0]-ALONG.x*40,f0[1]-ALONG.z*40]);line.push([f1[0]+ALONG.x*40,f1[1]+ALONG.z*40]);
