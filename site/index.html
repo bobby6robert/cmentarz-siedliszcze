@@ -842,7 +842,7 @@ function buildEntrances(){
       for(let t=E.tb-1.5;t<tg;t+=.5){const[ax,az]=E.P(t+.25);const pl=box(4.4,.06,.52,asph,ax,groundY(ax,az)+.02,az,AWAY_YAW);pl.castShadow=false}
       for(const sd of[-1,1]){box(.1,1.85,.1,blk,x+ALONG.x*half*sd,y+.92,z+ALONG.z*half*sd,AWAY_YAW);
         wing(x+ALONG.x*(half-.06)*sd,y,z+ALONG.z*(half-.06)*sd,half-.08,1.55,sd,sd<0?1.2:.08)}
-      tops.push([E.P(E.tt),3.5])}}
+      tops.push([E.P(tg),2.6])}}
   // ogrodzenie z siatki na szczycie skarpy wzdłuż ulicy, z przerwami na wejścia
   if(tops.length>1){tops.sort((a,b)=>(a[0][0]*ALONG.x+a[0][1]*ALONG.z)-(b[0][0]*ALONG.x+b[0][1]*ALONG.z));
     const line=tops.map(t=>t[0]),f0=line[0],f1=line[line.length-1];line.unshift([f0[0]-ALONG.x*40,f0[1]-ALONG.z*40]);line.push([f1[0]+ALONG.x*40,f1[1]+ALONG.z*40]);
