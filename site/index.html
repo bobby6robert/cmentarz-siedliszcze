@@ -362,7 +362,7 @@ function loadData(raw){const KD=raw.kinds||{};
   CENTER={x:GR.reduce((a,g)=>a+g.x,0)/GR.length,z:GR.reduce((a,g)=>a+g.z,0)/GR.length};
   IMG=raw.img;FOOT=raw.foot;SITE=FOOT;HG=raw.hgt||null;if(HG)HG.cm=cleanHeights(HG.cm,HG.nx);
   DEFAULT_POINTS=raw.ent.map((e,i)=>({id:"d"+(i+1),type:"wejscie",name:e[0],x:e[1],z:e[2]}));PTS=DEFAULT_POINTS.slice();
-  for(const t of raw.trees)if(!raw.ent.some(e=>Math.hypot(e[1]-t[0],e[2]-t[1])<6))TREES.push([t[0],t[1],2.6+rnd()*2.6,rnd()<.12?"b":"l"]);
+  for(const t of raw.trees)if(!raw.ent.some(e=>Math.hypot(e[1]-t[0],e[2]-t[1])<2.2))TREES.push([t[0],t[1],2.6+rnd()*2.6,rnd()<.12?"b":"l"]);
   const by={};for(const g of GR)(by[g.kw]=by[g.kw]||[]).push([g.x,g.z]);
   SECT=Object.entries(by).map(([n,pts])=>({n,hull:grow(hull(pts),2.6),cx:pts.reduce((a,p)=>a+p[0],0)/pts.length,cz:pts.reduce((a,p)=>a+p[1],0)/pts.length}));
 }
@@ -894,7 +894,7 @@ function buildEntrances(){
       const at=o=>[x-ALONG.x*o,z-ALONG.z*o],gate=(o)=>{const[a,b]=at(o),[c,d]=at(o+1.1),ya=groundY(a,b),yc=groundY(c,d);paths.push(at(o+.55));
         box(.08,1.7,.08,blk,a,ya+.85,b,AWAY_YAW);box(.08,1.7,.08,blk,c,yc+.85,d,AWAY_YAW);wing(c,yc,d,1.0,1.4,-1,.25);tops.push([at(o+.55),.7])};
       tops.push([E.P(tg),half+.15]);street.push(E.P(tg-5));if(/główna|wschod/i.test(p.name))street.parking=E.P(tg-5);
-      if(/zachod/i.test(p.name)){tops.push([at(half+.9),.9]);gate(half+7)}   // prześwit tuż przy bramie, bramka ok. 7 m dalej
+      if(/zachod/i.test(p.name)){tops.push([at(half+.45),.4]);gate(half+7)}   // prześwit tuż przy bramie, bramka ok. 7 m dalej
       else{gate(half+.05);
         // mostek nad rowem przy chodniku i żółta barierka po lewej stronie (patrząc z ulicy)
         const yel=Std({color:"#d9b51c",roughness:.5,metalness:.3}),r0=STREET.off(x,z),k0=AWAY.x*r0.g.n[0]+AWAY.z*r0.g.n[1],tw=(STREET.WALK-r0.o)/k0;
@@ -928,14 +928,14 @@ function buildEntrances(){
     const eg=PTS.find(p=>p.type==="wejscie"&&/główna/i.test(p.name)),wg=PTS.find(p=>p.type==="wejscie"&&/^brama zachod/i.test(p.name)),
       sE=eg?STREET.off(eg.x,eg.z).s-10:1e9,sW=wg?STREET.off(wg.x,wg.z).s-1:-1e9,concrete=(x,z)=>STREET.off(x,z).s<sW;let lastPost=-9;
     const cc=Std({color:"#b8b2a6",roughness:.95}),pos2=[],uv2=[],idx2=[];
-    for(let i=0;i<line.length-1;i++){const[a0,b0]=line[i],[a1,b1]=line[i+1],L=Math.hypot(a1-a0,b1-b0),n=Math.max(1,Math.round(L/1.25));
+    for(let i=0;i<line.length-1;i++){const[a0,b0]=line[i],[a1,b1]=line[i+1],L=Math.hypot(a1-a0,b1-b0),n=Math.max(1,Math.round(L/.6));
       for(let k=0;k<n;k++){const xa=a0+(a1-a0)*k/n,za=b0+(b1-b0)*k/n,xb=a0+(a1-a0)*(k+1)/n,zb=b0+(b1-b0)*(k+1)/n;
         const ya=groundY(xa,za),yb=groundY(xb,zb),d=Math.hypot(xb-xa,zb-za);
-        if(concrete(xa,za)){if(gap(xa,za)||gap(xb,zb)){u+=d;continue}
+        const gm=gap((xa+xb)/2,(za+zb)/2);if(concrete(xa,za)){if(gm){u+=d;lastPost=-9;continue}
           const ang=Math.atan2(xb-xa,zb-za)+Math.PI/2;if(u-lastPost>1.9){box(.16,1.55,.16,cc,xa,ya+.62,za,ang);lastPost=u}
           const v=pos2.length/3;pos2.push(xa,ya+.02,za,xb,yb+.02,zb,xb,yb+1.42,zb,xa,ya+1.42,za);uv2.push(u/2,0,(u+d)/2,0,(u+d)/2,1,u/2,1);idx2.push(v,v+1,v+2,v,v+2,v+3);u+=d;continue}
-        if(!gap(xa,za)&&(k%2===0||gap(xb,zb)||gap(a0+(a1-a0)*(k-1)/n,b0+(b1-b0)*(k-1)/n)))bar(new THREE.Vector3(xa,ya-.2,za),new THREE.Vector3(xa,ya+1.55,za),.03,grey);
-        if(gap(xa,za)||gap(xb,zb)){u+=d;continue}
+        if(!gm&&(k%4===0||gap((xb+a0+(a1-a0)*(k+2)/n)/2,(zb+b0+(b1-b0)*(k+2)/n)/2)||gap(a0+(a1-a0)*(k-.5)/n,b0+(b1-b0)*(k-.5)/n)))bar(new THREE.Vector3(xa,ya-.2,za),new THREE.Vector3(xa,ya+1.55,za),.03,grey);
+        if(gm){u+=d;continue}
         const v=pos.length/3;pos.push(xa,ya+.05,za,xb,yb+.05,zb,xb,yb+1.5,zb,xa,ya+1.5,za);uv.push(u/.18,0,(u+d)/.18,0,(u+d)/.18,1.45/.18,u/.18,1.45/.18);idx.push(v,v+1,v+2,v,v+2,v+3);u+=d}}
     const gg=new THREE.BufferGeometry();gg.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));gg.setAttribute("uv",new THREE.Float32BufferAttribute(uv,2));gg.setIndex(idx);gg.computeVertexNormals();
     const fm=new THREE.Mesh(gg,new THREE.MeshStandardMaterial({map:mt,transparent:true,alphaTest:.3,side:THREE.DoubleSide,roughness:.6,metalness:.4}));
