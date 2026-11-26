@@ -848,10 +848,13 @@ function buildStreet(){
   ribbon(S.ROAD+.18,S.WALK,pav("#a29e95","#7d7a73"),.5,.5,.12);                 // chodnik po stronie cmentarza (~3 m)
   ribbon(-S.ROAD-4.8,-S.ROAD-.18,pav("#8f8c86","#6f6c67"),.5,.5,.12);            // parking / pas postojowy po drugiej stronie
   ribbon(-S.ROAD-6.2,-S.ROAD-4.8,red,1,1,.125);                                 // czerwony pas kostki
+  const signTex=tex(64,64,(x,w,h)=>{x.fillStyle="#1f5fb4";x.fillRect(0,0,w,h);x.fillStyle="#fff";x.beginPath();x.moveTo(32,8);x.lineTo(58,56);x.lineTo(6,56);x.closePath();x.fill();x.fillStyle="#111";x.fillRect(22,44,20,4);x.beginPath();x.arc(32,24,3.5,0,7);x.fill();x.fillRect(30,28,4,12)});
   const lm=Std({color:"#ecebe5",roughness:.7}),flat=(s,o,w,l,ang)=>{const[px,pz]=S.at(s,o),b=new THREE.Mesh(new THREE.BoxGeometry(w,.01,l),lm);b.position.set(px,groundY(px,pz)+.14,pz);b.rotation.y=ang;scene.add(b)};
   const angAt=s=>{const a=S.at(s,0),b=S.at(s+1,0);return Math.atan2(b[0]-a[0],b[1]-a[1])};
   for(let s=4;s<S.len-4;s+=2.6)flat(s,-S.ROAD-2.5,.1,4.4,angAt(s)+Math.PI/2);                  // linie miejsc postojowych
-  for(const[cx,cz]of[[155.8,53.3],[236.9,90]]){const s0=S.off(cx,cz).s;for(let i=-2;i<=2;i++)flat(s0+i*.9,0,.45,6.2,angAt(s0)+Math.PI/2)}  // zebry
+  for(const[cx,cz]of[[155.8,53.3],[236.9,90]]){const s0=S.off(cx,cz).s;for(let i=-2;i<=2;i++)flat(s0+i*.9,0,.45,6.2,angAt(s0)+Math.PI/2);  // zebry
+    for(const o of[S.ROAD+.8,-S.ROAD-.8]){const[px,pz]=S.at(s0+(o>0?2.6:-2.6),o),y=groundY(px,pz);const post=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,2.4,6),Std({color:"#8a8d88",metalness:.5,roughness:.5}));post.position.set(px,y+1.2,pz);scene.add(post);
+      const sg=new THREE.Mesh(new THREE.BoxGeometry(.6,.6,.03),[0,0,0,0,1,1].map(f=>new THREE.MeshStandardMaterial({map:f?signTex:null,color:f?"#ffffff":"#1f5fb4",roughness:.5})));sg.position.set(px,y+2.25,pz);sg.rotation.y=angAt(s0);scene.add(sg)}}
 }
 function buildEntrances(){
   // wg zdjęć ze Street View: czarne stalowe bramy przy ulicy, betonowe schody z jedną poręczą, siatka na szczycie skarpy
@@ -889,7 +892,10 @@ function buildEntrances(){
       const at=o=>[x-ALONG.x*o,z-ALONG.z*o],gate=(o)=>{const[a,b]=at(o),[c,d]=at(o+1.1),ya=groundY(a,b),yc=groundY(c,d);paths.push(at(o+.55));
         box(.08,1.7,.08,blk,a,ya+.85,b,AWAY_YAW);box(.08,1.7,.08,blk,c,yc+.85,d,AWAY_YAW);wing(c,yc,d,1.0,1.4,-1,.25);tops.push([at(o+.55),.7])};
       tops.push([E.P(tg),half+.15]);street.push(E.P(tg-5));if(/główna|wschod/i.test(p.name))street.parking=E.P(tg-5);
-      if(/zachod/i.test(p.name)){tops.push([at(half+.9),.9]);gate(half+7)}   // prześwit tuż przy bramie, bramka ok. 7 m dalej
+      if(/zachod/i.test(p.name)){const yel=Std({color:"#d9b51c",roughness:.5,metalness:.3}),r0=STREET.off(x,z),k0=AWAY.x*r0.g.n[0]+AWAY.z*r0.g.n[1],tw=(STREET.WALK-r0.o)/k0;
+        for(const sd of[-1,1]){const pts=[];for(const t of[tw-.2,tw+1.6]){const[a,b]=[x+AWAY.x*t+ALONG.x*(half+.6)*sd,z+AWAY.z*t+ALONG.z*(half+.6)*sd],yy=groundY(a,b);pts.push(new THREE.Vector3(a,yy,b));bar(new THREE.Vector3(a,yy-.1,b),new THREE.Vector3(a,yy+1,b),.03,yel)}
+          for(const h of[.5,1])bar(pts[0].clone().setY(pts[0].y+h),pts[1].clone().setY(pts[1].y+h),.025,yel)}
+tops.push([at(half+.9),.9]);gate(half+7)}   // prześwit tuż przy bramie, bramka ok. 7 m dalej
       else gate(half+.05)}}
   // ścieżki z chodnika przez trawnik do bramek dla pieszych (wg zdjęć ze Street View)
   if(street.length>1){const sp=street.slice().sort((a,b)=>(a[0]*ALONG.x+a[1]*ALONG.z)-(b[0]*ALONG.x+b[1]*ALONG.z)),f=sp[0],l=sp[sp.length-1];
@@ -912,9 +918,16 @@ function buildEntrances(){
     const mt=new THREE.CanvasTexture(mc);mt.wrapS=mt.wrapT=THREE.RepeatWrapping;mt.encoding=THREE.sRGBEncoding;
     const pos=[],uv=[],idx=[];let u=0;
     const gap=(x,z)=>tops.some(([q,r])=>Math.hypot(x-q[0],z-q[1])<r);
+    // od okolic bramy głównej na wschód: betonowy płot ze sztachetami (wg zdjęć), dalej na zachód siatka
+    const eg=PTS.find(p=>p.type==="wejscie"&&/główna/i.test(p.name)),sE=eg?STREET.off(eg.x,eg.z).s-10:1e9,concrete=(x,z)=>STREET.off(x,z).s>sE;
+    const cc=Std({color:"#b8b2a6",roughness:.95}),pos2=[],uv2=[],idx2=[];
     for(let i=0;i<line.length-1;i++){const[a0,b0]=line[i],[a1,b1]=line[i+1],L=Math.hypot(a1-a0,b1-b0),n=Math.max(1,Math.round(L/1.25));
       for(let k=0;k<n;k++){const xa=a0+(a1-a0)*k/n,za=b0+(b1-b0)*k/n,xb=a0+(a1-a0)*(k+1)/n,zb=b0+(b1-b0)*(k+1)/n;
         const ya=groundY(xa,za),yb=groundY(xb,zb),d=Math.hypot(xb-xa,zb-za);
+        if(concrete(xa,za)){if(gap(xa,za)||gap(xb,zb)){u+=d;continue}
+          const ang=Math.atan2(xb-xa,zb-za)+Math.PI/2;box(.14,1.45,.14,cc,xa,ya+.6,za,ang);
+          const w=box(d,.32,.1,cc,(xa+xb)/2,(ya+yb)/2+.14,(za+zb)/2,ang);w.castShadow=true;
+          const v=pos2.length/3;pos2.push(xa,ya+.3,za,xb,yb+.3,zb,xb,yb+1.35,zb,xa,ya+1.35,za);uv2.push(u/.32,0,(u+d)/.32,0,(u+d)/.32,1,u/.32,1);idx2.push(v,v+1,v+2,v,v+2,v+3);u+=d;continue}
         if(!gap(xa,za)&&(k%2===0||gap(xb,zb)||gap(a0+(a1-a0)*(k-1)/n,b0+(b1-b0)*(k-1)/n)))bar(new THREE.Vector3(xa,ya-.2,za),new THREE.Vector3(xa,ya+1.55,za),.03,grey);
         if(gap(xa,za)||gap(xb,zb)){u+=d;continue}
         const v=pos.length/3;pos.push(xa,ya+.05,za,xb,yb+.05,zb,xb,yb+1.5,zb,xa,ya+1.5,za);uv.push(u/.18,0,(u+d)/.18,0,(u+d)/.18,1.45/.18,u/.18,1.45/.18);idx.push(v,v+1,v+2,v,v+2,v+3);u+=d}}
@@ -924,7 +937,11 @@ function buildEntrances(){
     // przezroczystość: tylko druty siatki są widoczne
     const al=new THREE.CanvasTexture(cm);fm.material.alphaMap=al;al.wrapS=al.wrapT=THREE.RepeatWrapping;
     const ac=cm.getContext("2d");ac.fillStyle="#000";ac.fillRect(0,0,64,64);ac.strokeStyle="#fff";ac.lineWidth=2.2;ac.beginPath();ac.moveTo(0,0);ac.lineTo(64,64);ac.moveTo(64,0);ac.lineTo(0,64);ac.stroke();al.needsUpdate=true;
-    scene.add(fm)}
+    scene.add(fm);
+    if(pos2.length){const sc=document.createElement("canvas");sc.width=64;sc.height=64;const sx=sc.getContext("2d");sx.fillStyle="#000";sx.fillRect(0,0,64,64);sx.fillStyle="#fff";sx.fillRect(10,0,30,64);
+      const sa=new THREE.CanvasTexture(sc);sa.wrapS=sa.wrapT=THREE.RepeatWrapping;
+      const g2=new THREE.BufferGeometry();g2.setAttribute("position",new THREE.Float32BufferAttribute(pos2,3));g2.setAttribute("uv",new THREE.Float32BufferAttribute(uv2,2));g2.setIndex(idx2);g2.computeVertexNormals();
+      const m2=new THREE.Mesh(g2,new THREE.MeshStandardMaterial({color:new THREE.Color("#b5afa3").convertSRGBToLinear(),alphaMap:sa,transparent:true,alphaTest:.4,side:THREE.DoubleSide,roughness:.95}));m2.castShadow=true;scene.add(m2)}}
 }
 
 /* ============ RUCH KAMERY ============ */
