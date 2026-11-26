@@ -896,7 +896,8 @@ function buildEntrances(){
   buildStreet();
   // ogrodzenie z siatki na szczycie skarpy wzdłuż ulicy, z przerwami na wejścia
   if(tops.length>1){tops.sort((a,b)=>(a[0][0]*ALONG.x+a[0][1]*ALONG.z)-(b[0][0]*ALONG.x+b[0][1]*ALONG.z));
-    const line=tops.map(t=>t[0]),f0=line[0],f1=line[line.length-1];line.unshift([f0[0]-ALONG.x*40,f0[1]-ALONG.z*40]);line.push([f1[0]+ALONG.x*40,f1[1]+ALONG.z*40]);
+    const keep=q=>{const{A,n}=STREET,o=(q[0]-A[0])*n[0]+(q[1]-A[1])*n[1];return o<6.3?[q[0]+n[0]*(6.3-o),q[1]+n[1]*(6.3-o)]:q};
+    const line=tops.map(t=>keep(t[0])),f0=line[0],f1=line[line.length-1];line.unshift(keep([f0[0]-ALONG.x*40,f0[1]-ALONG.z*40]));line.push(keep([f1[0]+ALONG.x*40,f1[1]+ALONG.z*40]));
     const mc=document.createElement("canvas");mc.width=mc.height=64;const mx=mc.getContext("2d");mx.strokeStyle="#8a8f8c";mx.lineWidth=2.2;mx.beginPath();mx.moveTo(0,0);mx.lineTo(64,64);mx.moveTo(64,0);mx.lineTo(0,64);mx.stroke();
     const mt=new THREE.CanvasTexture(mc);mt.wrapS=mt.wrapT=THREE.RepeatWrapping;mt.encoding=THREE.sRGBEncoding;
     const pos=[],uv=[],idx=[];let u=0;
