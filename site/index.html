@@ -39,6 +39,7 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;padding-blo
 .ov{position:absolute;color:var(--glass-fg)}
 .glass{background:var(--glass);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid var(--glass-line)}
 .hud{left:14px;top:14px;display:flex;gap:8px;flex-wrap:wrap;max-width:calc(100% - 170px)}
+#tGate{appearance:none;-webkit-appearance:none;max-width:170px}#tGate option{color:#1c1f1d;background:#fff}
 .chip{font:inherit;font-size:14px;font-weight:600;color:var(--glass-fg);border-radius:999px;padding:7px 14px;cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--glass-fg);color:#18201b}
 .where{left:14px;bottom:14px;border-radius:10px;padding:7px 12px;font-size:14px;max-width:calc(100% - 190px)}
@@ -165,6 +166,7 @@ footer{border-top:1px solid var(--line);padding-block:16px;color:var(--muted);fo
         <button class="chip glass" id="tWalk" type="button" aria-pressed="true">Spacer</button>
         <button class="chip glass" id="tMap" type="button" aria-pressed="false">Mapa</button>
         <button class="chip glass" id="tNight" type="button" aria-pressed="false">Wieczór</button>
+        <select class="chip glass" id="tGate" aria-label="Przejdź do wejścia"></select>
         <button class="chip glass" id="tFly" type="button">Widok z góry</button>
       </div>
       <canvas class="ov glass" id="mini" width="280" height="192" hidden aria-label="Mała mapa, kliknij, aby otworzyć mapę"></canvas>
@@ -409,7 +411,8 @@ function onPointsChange(){
   $("points").innerHTML=PTS.map((p,i)=>`<li><button type="button" data-i="${i}"><span>${p.type==="wejscie"?"🚪":"📷"} ${esc(p.name)}</span><small>${p.img?(p.pano?"panorama 360°":"zdjęcie"):"bez zdjęcia"}</small></button></li>`).join("")||`<li class="empty">Brak punktów.</li>`;
   $("points").querySelectorAll("button").forEach(b=>b.onclick=()=>openPoint(PTS[+b.dataset.i]));
   const ent=PTS.filter(p=>p.type==="wejscie");
-  $("gates").innerHTML=ent.map((p,i)=>`<button class="gbtn${i===2?" main":""}" type="button" data-i="${PTS.indexOf(p)}">${esc(p.name)}</button>`).join("");
+  $("tGate").innerHTML=`<option value="">Wejścia ▾</option>`+ent.map(p=>`<option value="${PTS.indexOf(p)}">${esc(p.name)}</option>`).join("");
+  $("gates").innerHTML=ent.map((p,i)=>`<button class="gbtn${/główna/i.test(p.name)?" main":""}" type="button" data-i="${PTS.indexOf(p)}">${esc(p.name)}</button>`).join("");
   $("gates").querySelectorAll("button").forEach(b=>b.onclick=()=>flyToPoint(PTS[+b.dataset.i]));
   if(GL.ready)buildMarkers();mapCache=null;drawMap();
 }
@@ -597,6 +600,7 @@ function setView(map){$("map").hidden=!map;$("tMap").setAttribute("aria-pressed"
   drawMap()}
 $("tMap").onclick=()=>setView($("map").hidden);
 $("tWalk").onclick=()=>{if(mode==="intro")flyToPoint(PTS.find(p=>p.type==="wejscie")||DEFAULT_POINTS[1]);setView(false)};
+$("tGate").onchange=e=>{const v=e.target.value;e.target.value="";if(v!=="")flyToPoint(PTS[+v])};
 $("tFly").onclick=()=>{mode="intro";$("map").hidden=true;$("pad").hidden=true;$("mini").hidden=true;$("where").hidden=true;$("hud").hidden=true;$("intro").classList.remove("out")};
 $("tNight").onclick=()=>{night=!night;$("tNight").setAttribute("aria-pressed",night);applyNight();for(const Lb of labels)Lb.id=-1;if(GL.ready)updateLabels()};
 function whereAt(x,z){
