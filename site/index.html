@@ -816,32 +816,42 @@ function entranceGeo(p){const P=t=>[p.x+AWAY.x*t,p.z+AWAY.z*t];const ts=[];for(l
   const tb=(ts.find(a=>a[1]>hmin+.08*d)||ts[0])[0]-.5,tt=(ts.find(a=>a[1]>hmin+.92*d)||ts[ts.length-1])[0];
   const tS=pastSidewalk(p),tb2=Math.max(Math.min(tb,-1),tS);return{tb:tb2,tt:Math.min(Math.max(tt,tb2+1.5),Math.max(5,tb2+1.5)),P,kind:/bramka/i.test(p.name)?"path":/brama/i.test(p.name)?"gate":/schod/i.test(p.name)?"stairs":"drive"}}
 /* ulica Szpitalna wzdłuż cmentarza – oś odczytana ze zdjęcia z drona; pasy liczone od osi jezdni (+ w stronę cmentarza) */
-const STREET=(()=>{const A=[60,19.5],B=[275,100.9],L0=Math.hypot(B[0]-A[0],B[1]-A[1]),d=[(B[0]-A[0])/L0,(B[1]-A[1])/L0];return{A,B,L0,d,n:[-d[1],d[0]]}})();
+/* ulica Szpitalna – oś jezdni odczytana ze zdjęcia z drona (łamana); + = strona cmentarza */
+const STREET=(()=>{const P=[[20,-3],[40,9.3],[70,17.6],[100,29.6],[132,42.7],[160,54.2],[190,67.2],[220,79.7],[247,90.8],[262,96.6],[300,110]];
+  const seg=[];let acc=0;for(let i=0;i<P.length-1;i++){const[a,b]=P[i],[c,d]=P[i+1],L=Math.hypot(c-a,d-b),t=[(c-a)/L,(d-b)/L];seg.push({a:[a,b],t,n:[-t[1],t[0]],L,s0:acc});acc+=L}
+  // przesunięcie punktu względem osi (metry, + w stronę cmentarza) i pozycja wzdłuż ulicy
+  const off=(x,z)=>{let best=null;for(const g of seg){const dx=x-g.a[0],dz=z-g.a[1],u=Math.max(0,Math.min(g.L,dx*g.t[0]+dz*g.t[1])),px=g.a[0]+g.t[0]*u,pz=g.a[1]+g.t[1]*u,dd=Math.hypot(x-px,z-pz);
+    if(!best||dd<best.dd)best={dd,o:(x-g.a[0])*g.n[0]+(z-g.a[1])*g.n[1],s:g.s0+u,g}}return best};
+  // punkt na ulicy w odległości s wzdłuż osi i o przesunięciu o (z gładkim przejściem na załamaniach)
+  const at=(s,o)=>{let i=seg.findIndex(g=>s<=g.s0+g.L);if(i<0)i=seg.length-1;const g=seg[i],u=s-g.s0;let n=g.n;
+    const blend=(h,w)=>[n[0]*(1-w)+h.n[0]*w,n[1]*(1-w)+h.n[1]*w];
+    if(u<2&&i>0)n=blend(seg[i-1],.5-u/4);else if(g.L-u<2&&i<seg.length-1)n=blend(seg[i+1],.5-(g.L-u)/4);
+    const k=Math.hypot(n[0],n[1]);return[g.a[0]+g.t[0]*u+n[0]/k*o,g.a[1]+g.t[1]*u+n[1]/k*o]};
+  return{P,seg,len:acc,off,at,ROAD:3.3,WALK:6.3}})();
 // najmniejsze t (wzdłuż AWAY od punktu wejścia), przy którym jesteśmy już za chodnikiem po stronie cmentarza
-function pastSidewalk(p){const{A,n}=STREET,o0=(p.x-A[0])*n[0]+(p.z-A[1])*n[1],k=AWAY.x*n[0]+AWAY.z*n[1];return(5.7-o0)/k}
+function pastSidewalk(p){const r=STREET.off(p.x,p.z),k=AWAY.x*r.g.n[0]+AWAY.z*r.g.n[1];return(STREET.WALK+.2-r.o)/k}
 function buildStreet(){
-  const{A,B,L0,d,n}=STREET;
-  const tex=(w,h,draw,rx)=>{const c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d");draw(x,w,h);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.encoding=THREE.sRGBEncoding;t.anisotropy=8;return t};
+  const S=STREET;
+  const tex=(w,h,draw)=>{const c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d");draw(x,w,h);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.encoding=THREE.sRGBEncoding;t.anisotropy=8;return t};
   const noise=(x,w,h,base,cols,n)=>{x.fillStyle=base;x.fillRect(0,0,w,h);for(let i=0;i<n;i++){x.fillStyle=cols[i%cols.length];x.fillRect(Math.random()*w,Math.random()*h,1.5,1.5)}};
-  // jezdnia: asfalt, linie krawędziowe i przerywana linia środkowa (tekstura 1 m długości na 7 m szerokości)
-  const asph=tex(128,448,(x,w,h)=>{noise(x,w,h,"#4b4c4e",["#3f4042","#58595b","#616264"],9000);x.fillStyle="#e9e7e0";x.fillRect(0,10,w,6);x.fillRect(0,h-16,w,6);x.fillRect(0,h/2-3,w*.45,6)});
-  const pav=(base,line)=>tex(128,128,(x,w,h)=>{noise(x,w,h,base,["#8e8a82","#a8a49b","#99958d"],2500);x.strokeStyle=line;x.lineWidth=2;for(let i=0;i<=4;i++){x.beginPath();x.moveTo(0,i*32);x.lineTo(w,i*32);x.stroke()}for(let j=0;j<4;j++)for(let i=0;i<=2;i++){x.beginPath();const o=(j%2)*32;x.moveTo(o+i*64,j*32);x.lineTo(o+i*64,j*32+32);x.stroke()}});
-  const ribbon=(o0,o1,map,ulen,vlen,dy,ext=60)=>{const pos=[],uv=[],idx=[],N=Math.round((L0+2*ext)/1.5);
-    for(let k=0;k<=N;k++){const s=-ext+(L0+2*ext)*k/N;for(const[o,v]of[[o0,0],[o1,1]]){const px=A[0]+d[0]*s+n[0]*o,pz=A[1]+d[1]*s+n[1]*o;pos.push(px,groundY(px,pz)+dy,pz);uv.push(s/ulen,v*(o1-o0)/vlen)}}
+  // jezdnia 6,6 m: asfalt, linie krawędziowe, przerywana linia środkowa
+  const asph=tex(128,422,(x,w,h)=>{noise(x,w,h,"#55565a",["#47484b","#606165","#6a6b6e"],9000);x.fillStyle="#ecebe5";x.fillRect(0,8,w,6);x.fillRect(0,h-14,w,6);x.fillRect(0,h/2-3,w*.45,6)});
+  const pav=(base,line)=>tex(128,128,(x,w,h)=>{noise(x,w,h,base,["#8e8a82","#aaa69d","#99958d"],2500);x.strokeStyle=line;x.lineWidth=2;for(let i=0;i<=4;i++){x.beginPath();x.moveTo(0,i*32);x.lineTo(w,i*32);x.stroke()}for(let j=0;j<4;j++)for(let i=0;i<=2;i++){x.beginPath();const o=(j%2)*32;x.moveTo(o+i*64,j*32);x.lineTo(o+i*64,j*32+32);x.stroke()}});
+  const ribbon=(o0,o1,map,ulen,vlen,dy)=>{const pos=[],uv=[],idx=[],N=Math.round(S.len/1.2);
+    for(let k=0;k<=N;k++){const s=S.len*k/N;for(const[o,v]of[[o0,0],[o1,1]]){const[px,pz]=S.at(s,o);pos.push(px,groundY(px,pz)+dy,pz);uv.push(s/ulen,v*(o1-o0)/vlen)}}
     for(let k=0;k<N;k++){const v=k*2;idx.push(v,v+2,v+1,v+1,v+2,v+3)}
     const g=new THREE.BufferGeometry();g.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));g.setAttribute("uv",new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();
-    const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({map,roughness:.92,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2}));m.receiveShadow=true;scene.add(m);return m};
+    const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({map,roughness:.92,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2}));m.receiveShadow=true;scene.add(m)};
   const red=tex(64,64,(x,w,h)=>noise(x,w,h,"#9c4a3c",["#8a3f33","#a85546"],600)),curb=tex(64,64,(x,w,h)=>noise(x,w,h,"#cfcbc2",["#bdb9b0","#dedad2"],600));
-  ribbon(-3.5,3.5,asph,4,7,.06);                                   // jezdnia
-  ribbon(3.5,3.68,curb,1,1,.14);ribbon(-3.68,-3.5,curb,1,1,.14);    // krawężniki
-  ribbon(3.68,5.6,pav("#a09c93","#7d7a73"),.5,.5,.12);             // chodnik po stronie cmentarza
-  const park=pav("#8f8c86","#6f6c67");ribbon(-10.8,-3.68,park,.5,.5,.12);   // pas postojowy / parking po drugiej stronie
-  ribbon(-12.6,-10.8,pav("#a6a299","#817e77"),.5,.5,.13);          // chodnik po drugiej stronie
-  ribbon(-13,-12.6,red,1,1,.135);                                  // czerwony pas kostki
-  // białe linie miejsc postojowych co 2,6 m
-  const lm=Std({color:"#e9e7e0",roughness:.7});for(let s=-50;s<L0+50;s+=2.6){const o=-7.2,px=A[0]+d[0]*s+n[0]*o,pz=A[1]+d[1]*s+n[1]*o;const b=new THREE.Mesh(new THREE.BoxGeometry(.1,.01,6.9),lm);b.position.set(px,groundY(px,pz)+.135,pz);b.rotation.y=Math.atan2(n[0],n[1]);scene.add(b)}
-  // przejścia dla pieszych (zebry) przy schodach i przy bramie głównej
-  for(const[cx,cz]of[[160.3,52.8],[245.1,89.4]]){const s=(cx-A[0])*d[0]+(cz-A[1])*d[1];for(let i=-2;i<=2;i++){const px=A[0]+d[0]*(s+i*1.0),pz=A[1]+d[1]*(s+i*1.0);const b=new THREE.Mesh(new THREE.BoxGeometry(.5,.01,6.6),lm);b.position.set(px,groundY(px,pz)+.075,pz);b.rotation.y=Math.atan2(n[0],n[1]);scene.add(b)}}
+  ribbon(-S.ROAD,S.ROAD,asph,4,6.6,.06);                                        // jezdnia
+  ribbon(S.ROAD,S.ROAD+.18,curb,1,1,.14);ribbon(-S.ROAD-.18,-S.ROAD,curb,1,1,.14); // krawężniki
+  ribbon(S.ROAD+.18,S.WALK,pav("#a29e95","#7d7a73"),.5,.5,.12);                 // chodnik po stronie cmentarza (~3 m)
+  ribbon(-S.ROAD-4.8,-S.ROAD-.18,pav("#8f8c86","#6f6c67"),.5,.5,.12);            // parking / pas postojowy po drugiej stronie
+  ribbon(-S.ROAD-6.2,-S.ROAD-4.8,red,1,1,.125);                                 // czerwony pas kostki
+  const lm=Std({color:"#ecebe5",roughness:.7}),flat=(s,o,w,l,ang)=>{const[px,pz]=S.at(s,o),b=new THREE.Mesh(new THREE.BoxGeometry(w,.01,l),lm);b.position.set(px,groundY(px,pz)+.14,pz);b.rotation.y=ang;scene.add(b)};
+  const angAt=s=>{const a=S.at(s,0),b=S.at(s+1,0);return Math.atan2(b[0]-a[0],b[1]-a[1])};
+  for(let s=4;s<S.len-4;s+=2.6)flat(s,-S.ROAD-2.5,.1,4.4,angAt(s)+Math.PI/2);                  // linie miejsc postojowych
+  for(const[cx,cz]of[[155.8,53.3],[236.9,90]]){const s0=S.off(cx,cz).s;for(let i=-2;i<=2;i++)flat(s0+i*.9,0,.45,6.2,angAt(s0)+Math.PI/2)}  // zebry
 }
 function buildEntrances(){
   // wg zdjęć ze Street View: czarne stalowe bramy przy ulicy, betonowe schody z jedną poręczą, siatka na szczycie skarpy
@@ -896,7 +906,7 @@ function buildEntrances(){
   buildStreet();
   // ogrodzenie z siatki na szczycie skarpy wzdłuż ulicy, z przerwami na wejścia
   if(tops.length>1){tops.sort((a,b)=>(a[0][0]*ALONG.x+a[0][1]*ALONG.z)-(b[0][0]*ALONG.x+b[0][1]*ALONG.z));
-    const keep=q=>{const{A,n}=STREET,o=(q[0]-A[0])*n[0]+(q[1]-A[1])*n[1];return o<6.3?[q[0]+n[0]*(6.3-o),q[1]+n[1]*(6.3-o)]:q};
+    const keep=q=>{const r=STREET.off(q[0],q[1]),m=STREET.WALK+.6;return r.o<m?[q[0]+r.g.n[0]*(m-r.o),q[1]+r.g.n[1]*(m-r.o)]:q};
     const line=tops.map(t=>keep(t[0])),f0=line[0],f1=line[line.length-1];line.unshift(keep([f0[0]-ALONG.x*40,f0[1]-ALONG.z*40]));line.push(keep([f1[0]+ALONG.x*40,f1[1]+ALONG.z*40]));
     const mc=document.createElement("canvas");mc.width=mc.height=64;const mx=mc.getContext("2d");mx.strokeStyle="#8a8f8c";mx.lineWidth=2.2;mx.beginPath();mx.moveTo(0,0);mx.lineTo(64,64);mx.moveTo(64,0);mx.lineTo(0,64);mx.stroke();
     const mt=new THREE.CanvasTexture(mc);mt.wrapS=mt.wrapT=THREE.RepeatWrapping;mt.encoding=THREE.sRGBEncoding;
