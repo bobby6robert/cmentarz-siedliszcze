@@ -762,7 +762,7 @@ function updateLabels(){
   const ids=new Set(want.map(g=>g.id)),free=labels.filter(Lb=>!ids.has(Lb.id)),have=new Set(labels.map(Lb=>Lb.id));
   for(const g of want){if(have.has(g.id))continue;const Lb=free.pop();if(!Lb)break;paintLabel(Lb,g)}
   for(const Lb of labels){if(Lb.id<0||!ids.has(Lb.id)){Lb.m.visible=false;continue}const g=GR[Lb.id];
-    const zf=g.L*.47-.18-.105,A=Lb.A||labelArea(g);
+    const zf=g.L*.47-.18-.124,A=Lb.A||labelArea(g);
     if(A.cross){// krzyż: tablica leżąca ukośnie na płycie przed krzyżem
       place(Lb.m,g,0,.43,zf-.42,Math.PI);Lb.m.rotateX(-1.05);Lb.m.scale.set(A.w,A.h,1)}
     else{place(Lb.m,g,0,A.yc,zf,Math.PI);Lb.m.scale.set(A.w,A.h,1)}Lb.m.visible=true}
