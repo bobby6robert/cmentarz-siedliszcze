@@ -367,9 +367,19 @@ function loadData(raw){const KD=raw.kinds||{};
 
 const CANDLE_COLORS={czerwony:"#a3262a",bialy:"#e9e4d8",zloty:"#c9a640",zielony:"#3f7a4a",fioletowy:"#6b3f86"};
 const CANDLE_LABEL={czerwony:"Czerwony",bialy:"Biały",zloty:"Złoty",zielony:"Zielony",fioletowy:"Fioletowy"};
-const SERV=[{id:"clean",n:"Sprzątanie grobu",d:"Liście, chwasty, stare znicze",p:80},{id:"candle",n:"Zapalenie znicza",d:"Prawdziwy znicz, wkład na 3 dni",p:15},
-  {id:"flowers",n:"Kwiaty lub wiązanka",d:"Świeże kwiaty sezonowe",p:60},{id:"wash",n:"Mycie pomnika",d:"Płyta i litery",p:120},
-  {id:"pack",n:"Pakiet na Wszystkich Świętych",d:"Sprzątanie, 2 znicze, wiązanka",p:150},{id:"photo",n:"Zdjęcie po wykonaniu",d:"SMS-em lub e-mailem",p:0}];
+/* cennik usług (ceny w zł); sprzątanie: cena zależy od wielkości grobu */
+const ORDER_MAIL="";   // adres e-mail, na który przychodzą zamówienia (do uzupełnienia)
+const ORDER_PHONE="";  // telefon kontaktowy (do uzupełnienia)
+const SERV=[{id:"clean",n:"Sprzątanie grobu",d:"Mycie płyty, zamiatanie, wyniesienie starych zniczy i kwiatów",p:70,p2:100},
+  {id:"candle",n:"Zapalenie znicza",d:"Znicz w cenie",p:20},
+  {id:"flowers",n:"Kwiaty na grób",d:"Stroik lub wiązanka w cenie",p:60,od:true},
+  {id:"weed",n:"Odchwaszczanie i porządek wokół grobu",d:"Chwasty, liście, ścieżka przy grobie",p:50},
+  {id:"pack",n:"Pakiet „Wszystkich Świętych”",d:"Sprzątanie + 2 znicze + stroik",p:150},
+  {id:"year",n:"Opieka roczna",d:"Sprzątanie 4 razy w roku + znicz na święta",p:300},
+  {id:"photo",n:"Zdjęcie grobu po wykonaniu",d:"W cenie każdej usługi – SMS-em lub e-mailem",p:0}];
+const bigGrave=g=>g&&(g.W>1.6||g.persons.length>2);
+const price=s=>s.p2&&selected!==null&&bigGrave(GR[selected])?s.p2:s.p;
+function renderServices(){$("services").innerHTML=SERV.map(s=>`<label class="svc" for="s-${s.id}"><input type="checkbox" id="s-${s.id}" ${s.p?"":"checked disabled"}><span class="t"><b>${s.n}${s.p2&&selected!==null&&bigGrave(GR[selected])?" (grób podwójny/rodzinny)":""}</b><small>${s.d}</small></span><span class="p">${s.p?(s.od?"od ":"")+price(s)+" zł":"gratis"}</span></label>`).join("");$("total").textContent="0 zł"}
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -426,9 +436,8 @@ function savedNote(ok){const n=$("mSaved");n.hidden=false;n.textContent=ok?"Zapi
 
 /* ============ GRÓB ============ */
 $("mColors").innerHTML=Object.keys(CANDLE_COLORS).map((k,i)=>`<label><input type="radio" name="cc" value="${k}" ${i?"":"checked"}><i style="background:${CANDLE_COLORS[k]}"></i>${CANDLE_LABEL[k]}</label>`).join("");
-$("services").innerHTML=SERV.map(s=>`<label class="svc" for="s-${s.id}"><input type="checkbox" id="s-${s.id}"><span class="t"><b>${s.n}</b><small>${s.d}</small></span><span class="p">${s.p?s.p+" zł":"gratis"}</span></label>`).join("");
-const picked=()=>SERV.filter(s=>$("s-"+s.id).checked);
-$("services").addEventListener("change",()=>{$("total").textContent=picked().reduce((a,s)=>a+s.p,0)+" zł"});
+const picked=()=>SERV.filter(s=>$("s-"+s.id).checked&&s.p);
+$("services").addEventListener("change",()=>{$("total").textContent=picked().reduce((a,s)=>a+price(s),0)+" zł"});
 try{const t=new Date();t.setDate(t.getDate()+2);$("date").value=t.toISOString().slice(0,10)}catch(e){}
 function renderGrave(){
   const g=GR[selected];
@@ -443,7 +452,7 @@ function renderGrave(){
   const ws=WP.filter(w=>w.g===g.code);
   $("mWpisy").innerHTML=ws.length?ws.map(w=>`<li>${esc(w.text)}<small>${esc(w.name||"Anonim")} · ${ago(w.t)}</small></li>`).join(""):`<li class="empty" style="background:none;padding:0">Brak wpisów. Napisz pierwszy.</li>`;
 }
-function openGrave(id){selected=id;highlight();mapCache=null;drawMap();$("mSaved").hidden=true;$("done").hidden=true;$("err").hidden=true;$("svcBox").open=false;renderGrave();$("modal").hidden=false;$("mClose").focus()}
+function openGrave(id){selected=id;highlight();mapCache=null;drawMap();$("mSaved").hidden=true;$("done").hidden=true;$("err").hidden=true;$("svcBox").open=false;renderServices();renderGrave();$("modal").hidden=false;$("mClose").focus()}
 const closeGrave=()=>{$("modal").hidden=true};
 $("mClose").onclick=closeGrave;$("modal").addEventListener("click",e=>{if(e.target===$("modal"))closeGrave()});
 $("bGo").onclick=()=>{goTo(selected);closeGrave()};
@@ -455,11 +464,13 @@ $("order").addEventListener("submit",async e=>{e.preventDefault();
   const svc=picked();let m="";
   if(!svc.length)m="Zaznacz przynajmniej jedną usługę.";else if(!$("date").value)m="Podaj termin.";else if(!$("name").value.trim())m="Wpisz imię i nazwisko.";else if($("phone").value.replace(/\D/g,"").length<9)m="Wpisz numer telefonu (9 cyfr).";
   if(m){$("err").textContent=m;$("err").hidden=false;return}$("err").hidden=true;
-  const g=GR[selected],sum=svc.reduce((a,s)=>a+s.p,0);
-  const o={g:g.code,who:g.title.slice(0,120),svc:svc.map(s=>s.n),sum,date:$("date").value,name:$("name").value.trim().slice(0,60),phone:$("phone").value.trim().slice(0,20),t:Date.now()};
-  let ok=false;try{const uid=user&&await user.id();if(db&&uid){const ref=db.doc("zamowienia/"+uid),cur=await ref.get();const list=(cur.exists&&cur.data().list)||[];await ref.set({list:[...list,o].slice(-50)});ok=true}}catch(e){ok=false}
+  const g=GR[selected],sum=svc.reduce((a,s)=>a+price(s),0);
+  const o={g:g.code,who:g.title.slice(0,120),svc:svc.map(s=>s.n+" – "+price(s)+" zł"),sum,date:$("date").value,name:$("name").value.trim().slice(0,60),phone:$("phone").value.trim().slice(0,20),t:Date.now()};
   const d=new Date(o.date).toLocaleDateString("pl-PL",{day:"numeric",month:"long"});
-  $("done").innerHTML=ok?`<b>Zamówienie przyjęte</b><br>${esc(o.svc.join(", "))} · grób ${esc(g.code)}, ${d}. Razem ${sum} zł. Zadzwonimy, żeby potwierdzić.`:`<b>Zamówienie nie zostało zapisane</b><br>Zamawiać mogą osoby, którym właściciel udostępnił stronę z prawem do korzystania.`;
+  const txt=`Zamówienie usługi – cmentarz parafialny w Siedliszczu\n\nGrób: ${g.code} (kwatera ${g.kw})\nPochowani: ${o.who}\nUsługi:\n- ${o.svc.join("\n- ")}\n+ zdjęcie grobu po wykonaniu (gratis)\nRazem: ${sum} zł\nTermin: ${d}\n\nZamawiający: ${o.name}\nTelefon: ${o.phone}`;
+  if(ORDER_MAIL){location.href="mailto:"+ORDER_MAIL+"?subject="+encodeURIComponent("Zamówienie – grób "+g.code)+"&body="+encodeURIComponent(txt);
+    $("done").innerHTML=`<b>Otworzyła się poczta z gotowym zamówieniem</b><br>Wyślij wiadomość – zadzwonimy, żeby potwierdzić termin i płatność.${ORDER_PHONE?` Możesz też zadzwonić: <a href="tel:${ORDER_PHONE.replace(/\s/g,"")}">${esc(ORDER_PHONE)}</a>.`:""}`}
+  else $("done").innerHTML=`<b>Zamawianie online rusza wkrótce</b><br>${esc(o.svc.join(", "))} · grób ${esc(g.code)}, ${d}. Razem ${sum} zł.${ORDER_PHONE?` Zadzwoń: <a href="tel:${ORDER_PHONE.replace(/\s/g,"")}">${esc(ORDER_PHONE)}</a>.`:""}`;
   $("done").hidden=false});
 
 /* ============ WYSZUKIWARKA ============ */
