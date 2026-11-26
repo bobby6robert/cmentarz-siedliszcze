@@ -330,7 +330,18 @@ function cleanHeights(c,nx){const nz=c.length/nx,a=c.slice(),T=50;
 function grow(poly,d){const cx=poly.reduce((a,p)=>a+p[0],0)/poly.length,cz=poly.reduce((a,p)=>a+p[1],0)/poly.length;
   return poly.map(p=>{const dx=p[0]-cx,dz=p[1]-cz,l=Math.hypot(dx,dz)||1;return[p[0]+dx/l*d,p[1]+dz/l*d]})}
 function inPoly(x,z,poly){let c=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b=poly[j];if((a[1]>z)!==(b[1]>z)&&x<(b[0]-a[0])*(z-a[1])/(b[1]-a[1])+a[0])c=!c}return c}
-function loadData(raw){
+/* rodzaj grobu z przeglądu zdjęć: W wysoki pomnik, T płyta + niska tablica, B podwyższona płyta + tablica, P płyta leżąca,
+   R rama z trawą, r rama + tablica, g rama z kamykami, Z mogiła ziemna, M mogiła z matą, K mogiła z krzyżem, + krzyż */
+function applyKind(g,k){if(!k)return;const t=k[0],cross=/[+m]/.test(k)||t==="K";g.kind=t;
+  if(t==="W"){g.h=Math.max(g.h,1.05);if(g.shape>2)g.shape=1}
+  else if(t==="T"){g.h=.5+(g.id%5)*.03;g.shape=g.id%2}
+  else if(t==="B"){g.h=.48+(g.id%4)*.03;g.shape=g.id%3===0?0:1;g.slab=true}
+  else if(t==="P")g.shape=4;
+  else if(t==="R"||t==="r"||t==="g"){g.frame=true;g.coverCol=t==="g"?"#e9e6de":"#5f7d3c";if(t==="r"){g.h=.42;g.shape=1}else g.shape=cross?3:5}
+  else if(t==="Z"||t==="K"||t==="M"){g.mound=true;g.coverCol=t==="M"?"#3f8a3c":"#6d5c40";g.shape=cross?3:5}
+  if(g.shape===3&&(g.mound||g.frame)){g.headCol="#3b3631";g.h=.95}
+  g.noLabel=g.shape===5}
+function loadData(raw){const KD=raw.kinds||{};
   for(const r of raw.g){
     const[code,kw,x,z,yaw0,L,W,ps,photo,hex]=r;const id=GR.length,old=OLD_SECT.has(kw),h=(id*2654435761>>>0)/4294967296;
     const yaw=yaw0;
@@ -342,7 +353,7 @@ function loadData(raw){
       m=R>G2*1.22&&R>B*1.22&&lum<.6?2:lum<.27?0:lum>.58?3:1;col="#"+hex}
     const g={id,code,kw,nr,x,z,yaw,photo:photo||"",col:col||STONES[m].base,L:Math.max(1.6,Math.min(3,L)),W:Math.max(.8,Math.min(2.6,W)),persons,title,mat:m,
       shape:old?(h*7%1<.5?3:0):Math.floor(h*13%1*3),h:old?1.2+h*7%1*.4:.85+h*5%1*.45,real:(h*31%1)<(old?.05:.2),thuja:!old&&(h*17%1)<.05,flowers:!old&&(h*23%1)<.28};
-    if(POPRAWKI[code])Object.assign(g,POPRAWKI[code]);
+    applyKind(g,KD[code]);if(POPRAWKI[code])Object.assign(g,POPRAWKI[code]);
     GR.push(g);BYCODE[code]=g;
     for(const p of persons)PERSONS.push({gid:id,full:(p.first+" "+p.last).trim(),born:p.born,died:p.died,n:norm(p.first+" "+p.last)});
   }
@@ -685,23 +696,23 @@ function buildGraves(){
   for(let m=0;m<STONES.length;m++){
     const gs=GR.filter(g=>g.mat===m);if(!gs.length)continue;
     const curb=new THREE.InstancedMesh(curbG,mats[m],gs.length),cover=new THREE.InstancedMesh(coverG,mats[m],gs.length),pl=new THREE.InstancedMesh(plinthG,mats[m],gs.length);
-    const flat=gs.filter(g=>g.shape===4),slab=new THREE.InstancedMesh(slabG,mats[m],Math.max(1,flat.length));slab.count=flat.length;slab.userData.ids=flat.map(g=>g.id);
-    flat.forEach((g,i)=>{place(DUMMY,g,0,.35,-.05);DUMMY.scale.set(g.W*.94*.76,1,g.L*.94*.78);DUMMY.updateMatrix();slab.setMatrixAt(i,DUMMY.matrix);slab.setColorAt(i,lin(g.col))});
+    const flat=gs.filter(g=>g.shape===4||g.slab),slab=new THREE.InstancedMesh(slabG,mats[m],Math.max(1,flat.length));slab.count=flat.length;slab.userData.ids=flat.map(g=>g.id);
+    flat.forEach((g,i)=>{if(g.slab){place(DUMMY,g,0,.35,-.2);DUMMY.scale.set(g.W*.94*.7,1,g.L*.94*.6)}else{place(DUMMY,g,0,.35,-.05);DUMMY.scale.set(g.W*.94*.76,1,g.L*.94*.78)}DUMMY.updateMatrix();slab.setMatrixAt(i,DUMMY.matrix);slab.setColorAt(i,lin(g.col))});
     if(flat.length){slab.castShadow=slab.receiveShadow=true;scene.add(slab);headMeshes.push(slab)}
     [curb,cover,pl].forEach(o=>{o.castShadow=true;o.receiveShadow=true});
-    gs.forEach((g,i)=>{const L=g.L*.94,W=g.W*.94,cc=lin(g.col);curb.setColorAt(i,cc);cover.setColorAt(i,cc);pl.setColorAt(i,cc);
-      place(DUMMY,g,0,.11,0);DUMMY.scale.set(W,1,L);DUMMY.updateMatrix();curb.setMatrixAt(i,DUMMY.matrix);
-      place(DUMMY,g,0,.255,-.1);DUMMY.scale.set(W*.84,1,L*.84);DUMMY.updateMatrix();cover.setMatrixAt(i,DUMMY.matrix);
-      place(DUMMY,g,0,.33,L/2-.18);DUMMY.scale.set(g.shape===4?0:W,g.shape===4?0:1,g.shape===4?0:1);DUMMY.updateMatrix();pl.setMatrixAt(i,DUMMY.matrix)});
+    gs.forEach((g,i)=>{const L=g.L*.94,W=g.W*.94,cc=lin(g.col),kc=g.coverCol?lin(g.coverCol):cc;curb.setColorAt(i,g.mound?kc:cc);cover.setColorAt(i,kc);pl.setColorAt(i,cc);
+      if(g.mound){place(DUMMY,g,0,.03,0);DUMMY.scale.set(W*.9,.3,L*.9)}else{place(DUMMY,g,0,.11,0);DUMMY.scale.set(W,1,L)}DUMMY.updateMatrix();curb.setMatrixAt(i,DUMMY.matrix);
+      if(g.mound){place(DUMMY,g,0,.1,-.05);DUMMY.scale.set(W*.78,2,L*.82)}else if(g.frame){place(DUMMY,g,0,.2,-.05);DUMMY.scale.set(W*.84,1,L*.86)}else{place(DUMMY,g,0,.255,-.1);DUMMY.scale.set(W*.84,1,L*.84)}DUMMY.updateMatrix();cover.setMatrixAt(i,DUMMY.matrix);
+      place(DUMMY,g,0,.33,L/2-.18);DUMMY.scale.set(g.shape>=4||g.mound||(g.frame&&g.shape===3)?0:W,g.shape>=4||g.mound||(g.frame&&g.shape===3)?0:1,1);DUMMY.updateMatrix();pl.setMatrixAt(i,DUMMY.matrix)});
     scene.add(curb,cover,pl);
     for(let k=0;k<SH.length;k++){const hs=gs.filter(g=>g.shape===k);if(!hs.length)continue;
       const im=new THREE.InstancedMesh(SH[k],mats[m],hs.length);im.castShadow=true;im.receiveShadow=true;im.userData.ids=hs.map(g=>g.id);
-      hs.forEach((g,i)=>{const w=headW(g);place(DUMMY,g,0,.44,g.L*.47-.18);DUMMY.scale.set(w,g.h,1.6);DUMMY.updateMatrix();im.setMatrixAt(i,DUMMY.matrix);im.setColorAt(i,lin(g.col))});
+      hs.forEach((g,i)=>{const w=headW(g);place(DUMMY,g,0,g.mound?.12:g.frame&&g.shape===3?.2:.44,g.L*.47-.18);DUMMY.scale.set(w,g.h,1.6);DUMMY.updateMatrix();im.setMatrixAt(i,DUMMY.matrix);im.setColorAt(i,lin(g.headCol||g.col))});
       scene.add(im);headMeshes.push(im)}
   }
 }
 function setCandle(g){
-  if(!glassI)return;const i=g.id,on=hasCandle(g)?1:0,off=((i%3)-1)*.28,fy=g.shape===4?.06:0;
+  if(!glassI)return;const i=g.id,on=hasCandle(g)?1:0,off=((i%3)-1)*.28,fy=g.shape===4||g.slab?.06:g.mound?-.12:g.frame?-.1:0;
   place(DUMMY,g,off,.39+fy,g.L*.47-.62);DUMMY.scale.set(on,on,on);DUMMY.updateMatrix();glassI.setMatrixAt(i,DUMMY.matrix);glassI.setColorAt(i,lin(candleColor(g)));
   place(DUMMY,g,off,.52+fy,g.L*.47-.62);DUMMY.scale.set(on,on,on);DUMMY.updateMatrix();capI.setMatrixAt(i,DUMMY.matrix);
   place(DUMMY,g,off,.6+fy,g.L*.47-.62);DUMMY.scale.set(on,on,on);DUMMY.updateMatrix();flameI.setMatrixAt(i,DUMMY.matrix);
@@ -766,7 +777,7 @@ function paintLabel(Lb,g){
   Lb.tex.needsUpdate=true;Lb.id=g.id;Lb.A=A;const mt=Lb.m.material;mt.metalness=gold?.7:0;mt.roughness=gold?.3:.6;mt.emissiveMap=night?Lb.tex:null;mt.emissive.set(night?"#e8c878":"#000000");mt.emissiveIntensity=night?.9:0;mt.needsUpdate=true}
 function updateLabels(){
   const near=[];const cx=Math.floor(player.x/6),cz=Math.floor(player.z/6);
-  for(let i=-3;i<=3;i++)for(let j=-3;j<=3;j++)for(const g of GRID[(cx+i)+","+(cz+j)]||[]){const d=Math.hypot(g.x-player.x,g.z-player.z);if(d<16)near.push([d,g])}
+  for(let i=-3;i<=3;i++)for(let j=-3;j<=3;j++)for(const g of GRID[(cx+i)+","+(cz+j)]||[]){const d=Math.hypot(g.x-player.x,g.z-player.z);if(d<16&&!g.noLabel)near.push([d,g])}
   near.sort((a,b)=>a[0]-b[0]);const want=near.slice(0,labels.length).map(n=>n[1]);
   const ids=new Set(want.map(g=>g.id)),free=labels.filter(Lb=>!ids.has(Lb.id)),have=new Set(labels.map(Lb=>Lb.id));
   for(const g of want){if(have.has(g.id))continue;const Lb=free.pop();if(!Lb)break;paintLabel(Lb,g)}
@@ -774,7 +785,7 @@ function updateLabels(){
     const zf=g.L*.47-.18-.124,A=Lb.A||labelArea(g);
     if(A.flat){place(Lb.m,g,0,.412,-.05,Math.PI);Lb.m.rotateX(-Math.PI/2);Lb.m.scale.set(A.w,A.h,1)}
     else if(A.cross){// krzyż: tablica leżąca ukośnie na płycie przed krzyżem
-      place(Lb.m,g,0,.43,zf-.42,Math.PI);Lb.m.rotateX(-1.05);Lb.m.scale.set(A.w,A.h,1)}
+      place(Lb.m,g,0,g.mound?.3:g.frame?.33:.43,zf-.42,Math.PI);Lb.m.rotateX(-1.05);Lb.m.scale.set(A.w,A.h,1)}
     else{place(Lb.m,g,0,A.yc,zf,Math.PI);Lb.m.scale.set(A.w,A.h,1)}Lb.m.visible=true}
   if(night){const lit=near.filter(e=>hasCandle(e[1])).slice(0,candleLights.length);
     candleLights.forEach((pl,i)=>{const e=lit[i];if(e){place(pl,e[1],((e[1].id%3)-1)*.28,.75,e[1].L*.47-.75);pl.intensity=1.0}else pl.intensity=0})}
@@ -922,8 +933,8 @@ function editPanel(){let b=$("editBar");
 onPointsChange();onMemoryChange();initMemory();
 const introP=document.querySelector("#intro p"),introText=introP.textContent;
 introP.textContent="Wczytuję plan cmentarza i listę pochowanych…";$("gates").hidden=true;
-(window.__GROBY__?Promise.resolve(window.__GROBY__):fetch("groby.json").then(r=>{if(!r.ok)throw 0;return r.json()}))
-.then(raw=>{
+Promise.all([window.__GROBY__?Promise.resolve(window.__GROBY__):fetch("groby.json").then(r=>{if(!r.ok)throw 0;return r.json()}),fetch("rodzaje.json").then(r=>r.ok?r.json():{}).catch(()=>({}))])
+.then(([raw,kinds])=>{raw.kinds=kinds;
   loadData(raw);indexGraves();
   MB={x0:0,x1:IMG.w,z0:0,z1:IMG.h};SITE_IN=grow(SITE,-2);plantTrees();onPointsChange();
   PHOTO=new Image();PHOTO.onload=()=>{mapCache=null;drawMap()};PHOTO.src="orto.jpg";
