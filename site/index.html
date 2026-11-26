@@ -900,6 +900,11 @@ function goTo(id){const g=GR[id];selected=id;highlight();const d=g.L/2+1.05;
   flyTo(g.x-Math.sin(g.yaw)*d,g.z-Math.cos(g.yaw)*d,g.yaw+Math.PI,-.3,mode==="walk"?1.4:2.6)}
 const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
 let last=performance.now(),acc=0,acc2=1;
+let farT=0,farV=false;
+function farFromGraves(){const now=performance.now();if(now-farT<250)return farV;farT=now;
+  const cx=Math.floor(player.x/6),cz=Math.floor(player.z/6);farV=true;
+  for(let i=-2;i<=2&&farV;i++)for(let j=-2;j<=2&&farV;j++)for(const g of GRID[(cx+i)+","+(cz+j)]||[])if(Math.hypot(g.x-player.x,g.z-player.z)<9){farV=false;break}
+  return farV}
 function loop(t){
   const dt=Math.min(.05,(t-last)/1000);last=t;
   sky.position.copy(camera.position);
@@ -911,7 +916,8 @@ function loop(t){
   else{
     const f=(keys.f?1:0)-(keys.b?1:0),turn=(keys.l?1:0)-(keys.r?1:0),str=(keys.sl?1:0)-(keys.sr?1:0);
     player.yaw+=turn*1.8*dt;
-    const tx=(-Math.sin(player.yaw)*f-Math.cos(player.yaw)*str)*4,tz=(-Math.cos(player.yaw)*f+Math.sin(player.yaw)*str)*4;
+    const wsp=4*(farFromGraves()?4:1);  // z dala od grobów (np. długa droga od bramy) idzie się 4x szybciej
+    const tx=(-Math.sin(player.yaw)*f-Math.cos(player.yaw)*str)*wsp,tz=(-Math.cos(player.yaw)*f+Math.sin(player.yaw)*str)*wsp;
     player.vx+=(tx-player.vx)*Math.min(1,dt*7);player.vz+=(tz-player.vz)*Math.min(1,dt*7);
     const nx=player.x+player.vx*dt,nz=player.z+player.vz*dt;
     if(walkable(nx,nz)){player.x=nx;player.z=nz}else{player.vx*=.3;player.vz*=.3}
